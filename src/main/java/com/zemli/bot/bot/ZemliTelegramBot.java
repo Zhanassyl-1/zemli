@@ -510,7 +510,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private void sendGroupMe(long chatId, long tgId) {
         Optional<PlayerRecord> po = registrationService.findRegistered(tgId);
         if (po.isEmpty()) {
-            sendText(chatId, "❌ Ты ещё не зарегистрирован! Напиши @ZemliGameBot /start");
+            sendText(chatId, "❌ Ты ещё не зарегистрирован! Напиши @" + botUsername + " /start");
             return;
         }
         PlayerRecord p = po.get();
@@ -563,7 +563,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                         "/alliances — список альянсов\n" +
                         "/event — событие дня\n" +
                         "━━━━━━━━━━━━━━━\n" +
-                        "🤖 Играть: @ZemliGameBot");
+                        "🤖 Играть: @" + botUsername);
     }
 
     private String ago(long ts) {

@@ -28,12 +28,15 @@ import java.util.List;
 public class TelegramBotConfig {
 
     private static final Logger log = LoggerFactory.getLogger(TelegramBotConfig.class);
+    @Value("${BOT_TOKEN}")
+    private String botToken;
+    @Value("${BOT_USERNAME}")
+    private String botUsername;
+    @Value("${GROUP_CHAT_ID:0}")
+    private Long groupChatId;
 
     @Bean
     public ZemliTelegramBot zemliTelegramBot(
-            @Value("${telegram.bot.token}") String botToken,
-            @Value("${telegram.bot.username}") String botUsername,
-            @Value("${GROUP_CHAT_ID:0}") Long groupChatId,
             RegistrationService registrationService,
             MenuService menuService,
             GameDao gameDao,
@@ -41,10 +44,10 @@ public class TelegramBotConfig {
             TaskExecutor taskExecutor
     ) {
         if (!StringUtils.hasText(botToken)) {
-            throw new IllegalStateException("telegram.bot.token is empty. Set BOT_TOKEN in Railway variables.");
+            throw new IllegalStateException("BOT_TOKEN is empty. Set BOT_TOKEN in Railway variables.");
         }
         if (!StringUtils.hasText(botUsername)) {
-            throw new IllegalStateException("telegram.bot.username is empty. Set BOT_USERNAME in Railway variables.");
+            throw new IllegalStateException("BOT_USERNAME is empty. Set BOT_USERNAME in Railway variables.");
         }
         return new ZemliTelegramBot(
                 botToken,
