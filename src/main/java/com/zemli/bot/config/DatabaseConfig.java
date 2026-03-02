@@ -11,7 +11,17 @@ import javax.sql.DataSource;
 public class DatabaseConfig {
 
     @Bean
-    public DataSource dataSource(@Value("${spring.datasource.url}") String rawUrl) {
+    public DataSource dataSource(
+            @Value("${DATABASE_URL:}") String databaseUrl,
+            @Value("${SQLITE_URL:jdbc:sqlite:./data/bot.sqlite3}") String sqliteUrl
+    ) {
+        if (databaseUrl != null && !databaseUrl.isBlank()) {
+            return postgresDataSource(databaseUrl);
+        }
+        return sqliteDataSource(sqliteUrl);
+    }
+
+    private DataSource postgresDataSource(String rawUrl) {
         HikariDataSource dataSource = new HikariDataSource();
         dataSource.setDriverClassName("org.postgresql.Driver");
         dataSource.setJdbcUrl(normalizeJdbcUrl(rawUrl));
@@ -22,9 +32,20 @@ public class DatabaseConfig {
         return dataSource;
     }
 
+    private DataSource sqliteDataSource(String sqliteUrl) {
+        HikariDataSource dataSource = new HikariDataSource();
+        dataSource.setDriverClassName("org.sqlite.JDBC");
+        dataSource.setJdbcUrl(sqliteUrl);
+        dataSource.setMaximumPoolSize(1);
+        dataSource.setMinimumIdle(1);
+        dataSource.setConnectionTimeout(3000);
+        dataSource.setPoolName("zemli-sqlite-pool");
+        return dataSource;
+    }
+
     private String normalizeJdbcUrl(String rawUrl) {
         if (rawUrl == null || rawUrl.isBlank()) {
-            throw new IllegalStateException("spring.datasource.url / DATABASE_URL is empty");
+            throw new IllegalStateException("DATABASE_URL is empty");
         }
         if (rawUrl.startsWith("jdbc:postgresql://")) {
             return rawUrl;
