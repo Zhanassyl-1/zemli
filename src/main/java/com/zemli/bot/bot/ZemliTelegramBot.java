@@ -352,7 +352,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
         if ("/start".equalsIgnoreCase(commandToken)) {
             if (!isPrivate) {
-                sendText(chatId, "👋 Привет! Чтобы играть напиши мне в личку: @Bysylabot");
+                sendText(chatId, "👋 Привет! Чтобы играть напиши мне в личку: @" + botUsername);
                 return;
             }
             if (registrationService.findRegistered(tgId).isPresent()) {

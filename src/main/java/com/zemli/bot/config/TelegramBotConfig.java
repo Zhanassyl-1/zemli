@@ -12,6 +12,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.util.StringUtils;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
@@ -39,6 +40,12 @@ public class TelegramBotConfig {
             GameCatalog gameCatalog,
             TaskExecutor taskExecutor
     ) {
+        if (!StringUtils.hasText(botToken)) {
+            throw new IllegalStateException("telegram.bot.token is empty. Set BOT_TOKEN in Railway variables.");
+        }
+        if (!StringUtils.hasText(botUsername)) {
+            throw new IllegalStateException("telegram.bot.username is empty. Set BOT_USERNAME in Railway variables.");
+        }
         return new ZemliTelegramBot(
                 botToken,
                 botUsername,
@@ -54,16 +61,13 @@ public class TelegramBotConfig {
     @Bean
     public CommandLineRunner registerTelegramBotRunner(ZemliTelegramBot bot) {
         return args -> {
-            String token = bot.getConfiguredToken();
-            String tokenPreview = token == null ? "null" : (token.length() > 10 ? token.substring(0, 10) : token);
-            log.info("Bot starting with token: {}", tokenPreview);
             log.info("Bot username configured as: {}", bot.getBotUsername());
 
             try {
                 bot.execute(new DeleteWebhook());
                 log.info("Webhook deleted (if existed), using Long Polling");
             } catch (Exception e) {
-                log.warn("Failed to delete webhook, continue with Long Polling", e);
+                throw new IllegalStateException("Failed to delete webhook before Long Polling", e);
             }
 
             try {
@@ -71,7 +75,7 @@ public class TelegramBotConfig {
                 botsApi.registerBot(bot);
                 log.info("Telegram Long Polling bot registered successfully");
             } catch (Exception e) {
-                log.error("Failed to register Telegram bot", e);
+                throw new IllegalStateException("Failed to register Telegram bot (check BOT_TOKEN and bot state)", e);
             }
 
             long groupChatId = bot.getGroupChatId();
