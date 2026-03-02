@@ -4,7 +4,6 @@ import com.zemli.bot.bot.ZemliTelegramBot;
 import com.zemli.bot.dao.GameDao;
 import com.zemli.bot.model.MarketListing;
 import com.zemli.bot.model.DailyEventType;
-import com.zemli.bot.service.GameCatalog;
 import com.zemli.bot.service.GroupAnnouncementService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,16 +20,14 @@ public class GameScheduler {
     private final GameDao gameDao;
     private final GroupAnnouncementService announcementService;
     private final ZemliTelegramBot bot;
-    private final GameCatalog gameCatalog;
 
-    public GameScheduler(GameDao gameDao, GroupAnnouncementService announcementService, ZemliTelegramBot bot, GameCatalog gameCatalog) {
+    public GameScheduler(GameDao gameDao, GroupAnnouncementService announcementService, ZemliTelegramBot bot) {
         this.gameDao = gameDao;
         this.announcementService = announcementService;
         this.bot = bot;
-        this.gameCatalog = gameCatalog;
     }
 
-    @Scheduled(cron = "0 0 */4 * * *", zone = "${game.time-zone:UTC}")
+    @Scheduled(cron = "0 */10 * * * *", zone = "${game.time-zone:UTC}")
     public void passiveIncomeTick() {
         double mul = 1.0;
         String today = DailyEventType.todayUtc();
@@ -64,27 +61,6 @@ public class GameScheduler {
         }
         if (!ended.isEmpty()) {
             log.info("Closed auctions={}", ended.size());
-        }
-    }
-
-    @Scheduled(cron = "0 * * * * *", zone = "${game.time-zone:UTC}")
-    public void finishBuildingUpgrades() {
-        long now = System.currentTimeMillis();
-        var completed = gameDao.findCompletedBuilds(now);
-        int done = gameDao.finishBuildingUpgrades();
-        if (done > 0) {
-            for (var c : completed) {
-                String title = gameCatalog.buildings().containsKey(c.buildingType())
-                        ? gameCatalog.buildings().get(c.buildingType()).title()
-                        : c.buildingType();
-                bot.sendText(c.telegramId(), "🏗️ " + title + " улучшено до ур." + c.toLevel());
-                announcementService.announceBuildingCompleted(c.playerId(), c.villageName(), title);
-                gameDao.appendDailyLog("BUILDING_DONE", c.villageName() + " построил/улучшил " + title + " до ур." + c.toLevel());
-                if ("TOWN_HALL".equals(c.buildingType())) {
-                    announcementService.announceCityLevelUp(c.villageName(), c.toLevel());
-                }
-            }
-            log.info("Finished building upgrades={}", done);
         }
     }
 

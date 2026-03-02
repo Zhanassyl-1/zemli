@@ -7,50 +7,41 @@ public enum Faction {
     KNIGHTS(
             "Рыцари",
             "Мечник -> Арбалетчик -> Паладин",
-            "Броня +20% против лучников",
-            12
+            "Броня +20% против лучников"
     ),
     SAMURAI(
             "Самураи",
             "Асигару -> Лучник -> Самурай",
-            "Ближний бой +15%",
-            10
+            "Ближний бой +15%"
     ),
     VIKINGS(
             "Викинги",
             "Берсерк -> Лучник -> Ярл",
-            "Море +25%, порт даёт двойных юнитов",
-            8
+            "Море +25%, порт даёт двойных юнитов"
     ),
     MONGOLS(
             "Монголы",
             "Лучник -> Всадник -> Хан",
-            "В степи: победа x1.1, поражение x0.9",
-            4
+            "В степи: победа x1.1, поражение x0.9"
     ),
     DESERT_DWELLERS(
             "Пустынники",
             "Копейщик -> Лучник -> Мамлюк",
-            "В жаре/пустыне +15%",
-            8
+            "В жаре/пустыне +15%"
     ),
     AZTECS(
             "Ацтеки",
             "Воин -> Ягуар -> Жрец-воин",
-            "Манна +20%, джунгли +15%",
-            8
+            "Манна +20%, джунгли +15%"
     );
 
     private final String title;
     private final String units;
     private final String bonus;
-    private final int battleCooldownHours;
-
-    Faction(String title, String units, String bonus, int battleCooldownHours) {
+    Faction(String title, String units, String bonus) {
         this.title = title;
         this.units = units;
         this.bonus = bonus;
-        this.battleCooldownHours = battleCooldownHours;
     }
 
     public String getTitle() {
@@ -63,10 +54,6 @@ public enum Faction {
 
     public String getBonus() {
         return bonus;
-    }
-
-    public int getBattleCooldownHours() {
-        return battleCooldownHours;
     }
 
     public String callbackData() {

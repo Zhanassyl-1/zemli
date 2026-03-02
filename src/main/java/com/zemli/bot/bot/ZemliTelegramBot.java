@@ -816,7 +816,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 if (current.containsKey(spec.key()) || player.cityLevel() < spec.requiredCityLevel()) {
                     continue;
                 }
-                rows.add(List.of(btn("🔨 " + spec.title() + " " + costText(spec.cost()) + " | " + spec.hours() + "ч", "build:new:" + spec.key())));
+                rows.add(List.of(btn("🔨 " + spec.title() + " " + costText(spec.cost()), "build:new:" + spec.key())));
             }
         } else if ("up".equals(tab)) {
             for (GameCatalog.BuildingSpec spec : catalog.buildings().values()) {

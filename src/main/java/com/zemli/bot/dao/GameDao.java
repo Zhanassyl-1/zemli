@@ -35,6 +35,7 @@ public class GameDao {
     public record AllianceMemberInfo(long playerId, long telegramId, String villageName, boolean leader, long joinedAt) {}
     public record AllianceInviteInfo(long id, long allianceId, String allianceName, long inviterId, String inviterVillage, long invitedPlayerId, long createdAt) {}
     public record PlayerBattleStats(int wins, int losses) {}
+    public record Build(long playerId, String buildingType, int level) {}
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -1216,6 +1217,16 @@ public class GameDao {
                 "INSERT INTO buildings(player_id, building_type, level) VALUES (?, ?, 1)",
                 playerId, buildingType
         );
+    }
+
+    public List<Build> findCompletedBuilds(long nowEpochMillis) {
+        // Compatibility method for schedulers that still expect asynchronous build completion.
+        // Current schema applies building upgrades instantly, so there is no build queue.
+        return List.of();
+    }
+
+    public void finishBuildingUpgrades() {
+        // Compatibility no-op: upgrades are applied immediately by buildInstant/upgradeBuildingInstant.
     }
 
     public int upgradeBuildingInstant(long playerId, String buildingType) {
