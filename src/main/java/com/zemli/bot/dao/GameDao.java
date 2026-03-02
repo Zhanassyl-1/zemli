@@ -45,42 +45,7 @@ public class GameDao {
     }
 
     private void migrateAllianceSchemaIfNeeded() {
-        try {
-            List<String> columns = jdbcTemplate.query(
-                    "PRAGMA table_info(alliances)",
-                    (rs, rowNum) -> rs.getString("name")
-            );
-            if (columns.contains("player1_id")) {
-                jdbcTemplate.execute("ALTER TABLE alliances RENAME TO alliances_legacy");
-            }
-        } catch (Exception ignored) {
-        }
-
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS alliances (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    leader_id INTEGER NOT NULL,
-                    created_at INTEGER NOT NULL
-                )
-                """);
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS alliance_members (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    alliance_id INTEGER NOT NULL,
-                    player_id INTEGER NOT NULL UNIQUE,
-                    joined_at INTEGER NOT NULL
-                )
-                """);
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS alliance_invites (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    alliance_id INTEGER NOT NULL,
-                    inviter_id INTEGER NOT NULL,
-                    invited_player_id INTEGER NOT NULL,
-                    created_at INTEGER NOT NULL
-                )
-                """);
+        // No-op for PostgreSQL setup; schema is managed by schema.sql.
     }
 
     public Optional<PlayerRecord> findPlayerByTelegramId(long telegramId) {
@@ -628,25 +593,33 @@ public class GameDao {
     }
 
     public long createAuction(long sellerId, String itemType, int startPrice, long endsAt) {
-        jdbcTemplate.update(
+        Long id = jdbcTemplate.queryForObject(
                 """
                 INSERT INTO market_listings(seller_id, item_type, price, is_auction, auction_ends_at, highest_bidder_id, highest_bid)
                 VALUES (?, ?, ?, 1, ?, NULL, NULL)
+                RETURNING id
                 """,
                 sellerId, itemType, startPrice, endsAt
         );
-        return jdbcTemplate.queryForObject("SELECT last_insert_rowid()", Long.class);
+        if (id == null) {
+            throw new IllegalStateException("Failed to create auction");
+        }
+        return id;
     }
 
     public long createDirectListing(long sellerId, long buyerId, String itemType, int price) {
-        jdbcTemplate.update(
+        Long id = jdbcTemplate.queryForObject(
                 """
                 INSERT INTO market_listings(seller_id, item_type, price, is_auction, auction_ends_at, highest_bidder_id, highest_bid)
                 VALUES (?, ?, ?, 0, NULL, ?, NULL)
+                RETURNING id
                 """,
                 sellerId, itemType, price, buyerId
         );
-        return jdbcTemplate.queryForObject("SELECT last_insert_rowid()", Long.class);
+        if (id == null) {
+            throw new IllegalStateException("Failed to create direct listing");
+        }
+        return id;
     }
 
     @Transactional
@@ -981,11 +954,10 @@ public class GameDao {
 
     @Transactional
     public Optional<AllianceInfo> createAlliance(String name, long leaderId) {
-        jdbcTemplate.update(
-                "INSERT INTO alliances(name, leader_id, created_at) VALUES (?, ?, ?)",
+        Long id = jdbcTemplate.queryForObject(
+                "INSERT INTO alliances(name, leader_id, created_at) VALUES (?, ?, ?) RETURNING id",
                 name, leaderId, Instant.now().toEpochMilli()
         );
-        Long id = jdbcTemplate.queryForObject("SELECT last_insert_rowid()", Long.class);
         if (id == null) {
             return Optional.empty();
         }
@@ -999,7 +971,8 @@ public class GameDao {
     public List<AllianceMemberInfo> allianceMembers(long allianceId) {
         return jdbcTemplate.query(
                 """
-                SELECT p.id AS player_id, p.telegram_id, p.village_name, m.joined_at, (a.leader_id = p.id) AS is_leader
+                SELECT p.id AS player_id, p.telegram_id, p.village_name, m.joined_at,
+                       CASE WHEN a.leader_id = p.id THEN 1 ELSE 0 END AS is_leader
                 FROM alliance_members m
                 JOIN players p ON p.id = m.player_id
                 JOIN alliances a ON a.id = m.alliance_id
@@ -1075,11 +1048,10 @@ public class GameDao {
     }
 
     public long createAllianceInvite(long allianceId, long inviterId, long invitedPlayerId) {
-        jdbcTemplate.update(
-                "INSERT INTO alliance_invites(alliance_id, inviter_id, invited_player_id, created_at) VALUES (?, ?, ?, ?)",
+        Long id = jdbcTemplate.queryForObject(
+                "INSERT INTO alliance_invites(alliance_id, inviter_id, invited_player_id, created_at) VALUES (?, ?, ?, ?) RETURNING id",
                 allianceId, inviterId, invitedPlayerId, Instant.now().toEpochMilli()
         );
-        Long id = jdbcTemplate.queryForObject("SELECT last_insert_rowid()", Long.class);
         return id == null ? 0L : id;
     }
 
@@ -1339,16 +1311,20 @@ public class GameDao {
     }
 
     public long createBattle(long attackerId, long defenderId, int attackerHp, int defenderHp, int maxRounds, String status) {
-        jdbcTemplate.update(
+        Long id = jdbcTemplate.queryForObject(
                 """
                 INSERT INTO battles(attacker_id, defender_id, attacker_hp, defender_hp, attacker_max_hp, defender_max_hp,
                                     current_round, max_rounds, attacker_action, defender_action, status, created_at,
                                     round_started_at, history)
                 VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, NULL, ?, ?, NULL, '')
+                RETURNING id
                 """,
                 attackerId, defenderId, attackerHp, defenderHp, attackerHp, defenderHp, maxRounds, status, Instant.now().toEpochMilli()
         );
-        return jdbcTemplate.queryForObject("SELECT last_insert_rowid()", Long.class);
+        if (id == null) {
+            throw new IllegalStateException("Failed to create battle");
+        }
+        return id;
     }
 
     public Optional<BattleRecord> findBattle(long battleId) {

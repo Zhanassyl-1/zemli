@@ -1,9 +1,9 @@
 package com.zemli.bot.config;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.util.StringUtils;
 
 import javax.sql.DataSource;
 
@@ -11,35 +11,30 @@ import javax.sql.DataSource;
 public class DatabaseConfig {
 
     @Bean
-    public DataSource dataSource(GameProperties properties) {
-        String jdbcUrl = normalizeDatabaseUrl(properties.getDatabaseUrl());
-
+    public DataSource dataSource(@Value("${spring.datasource.url}") String rawUrl) {
         HikariDataSource dataSource = new HikariDataSource();
-        dataSource.setDriverClassName("org.sqlite.JDBC");
-        dataSource.setJdbcUrl(jdbcUrl);
+        dataSource.setDriverClassName("org.postgresql.Driver");
+        dataSource.setJdbcUrl(normalizeJdbcUrl(rawUrl));
         dataSource.setConnectionTimeout(3000);
         dataSource.setMaximumPoolSize(20);
         dataSource.setMinimumIdle(5);
-        dataSource.setPoolName("zemli-sqlite-pool");
+        dataSource.setPoolName("zemli-postgres-pool");
         return dataSource;
     }
 
-    private String normalizeDatabaseUrl(String rawUrl) {
-        if (!StringUtils.hasText(rawUrl)) {
-            return "jdbc:sqlite:bot.sqlite3";
+    private String normalizeJdbcUrl(String rawUrl) {
+        if (rawUrl == null || rawUrl.isBlank()) {
+            throw new IllegalStateException("spring.datasource.url / DATABASE_URL is empty");
         }
-        if (rawUrl.startsWith("jdbc:sqlite:")) {
+        if (rawUrl.startsWith("jdbc:postgresql://")) {
             return rawUrl;
         }
-        if (rawUrl.startsWith("sqlite+aiosqlite:///")) {
-            return "jdbc:sqlite:" + rawUrl.substring("sqlite+aiosqlite:///".length());
+        if (rawUrl.startsWith("postgresql://")) {
+            return "jdbc:" + rawUrl;
         }
-        if (rawUrl.startsWith("sqlite:///")) {
-            return "jdbc:sqlite:" + rawUrl.substring("sqlite:///".length());
+        if (rawUrl.startsWith("postgres://")) {
+            return "jdbc:postgresql://" + rawUrl.substring("postgres://".length());
         }
-        if (rawUrl.startsWith("sqlite://")) {
-            return "jdbc:sqlite:" + rawUrl.substring("sqlite://".length());
-        }
-        return "jdbc:sqlite:" + rawUrl;
+        throw new IllegalStateException("Unsupported DATABASE_URL format: " + rawUrl);
     }
 }

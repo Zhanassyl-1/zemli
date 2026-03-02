@@ -11,18 +11,9 @@ import java.util.stream.Collectors;
 @ConfigurationProperties(prefix = "game")
 public class GameProperties {
 
-    private String databaseUrl;
     private long groupChatId;
     private String timeZone = "UTC";
     private String adminIds = "";
-
-    public String getDatabaseUrl() {
-        return databaseUrl;
-    }
-
-    public void setDatabaseUrl(String databaseUrl) {
-        this.databaseUrl = databaseUrl;
-    }
 
     public long getGroupChatId() {
         return groupChatId;
