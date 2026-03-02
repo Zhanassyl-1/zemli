@@ -21,9 +21,10 @@ public class GameCatalog {
 
     private final Map<String, BuildingSpec> buildings = new LinkedHashMap<>();
     private final Map<Faction, List<UnitSpec>> unitsByFaction = new LinkedHashMap<>();
+    private final Map<String, Map<Integer, Cost>> buildingUpgradeCosts = new LinkedHashMap<>();
 
     public GameCatalog() {
-        buildings.put("TOWN_HALL", new BuildingSpec("TOWN_HALL", "Ратуша", "🏛️", 1, new Cost(200, 150, 0, 0, 50, 0, 0), 4));
+        buildings.put("TOWN_HALL", new BuildingSpec("TOWN_HALL", "Ратуша", "🏠", 1, new Cost(200, 150, 0, 0, 50, 0, 0), 4));
         buildings.put("BARRACKS", new BuildingSpec("BARRACKS", "Казарма", "🛡️", 1, new Cost(80, 60, 0, 0, 0, 0, 0), 2));
         buildings.put("RANGE", new BuildingSpec("RANGE", "Стрельбище", "🏹", 1, new Cost(120, 100, 0, 0, 0, 0, 0), 3));
         buildings.put("STABLE", new BuildingSpec("STABLE", "Конюшня", "🐎", 1, new Cost(200, 150, 0, 30, 0, 0, 0), 5));
@@ -33,6 +34,39 @@ public class GameCatalog {
         buildings.put("MARKET", new BuildingSpec("MARKET", "Рынок", "🏦", 2, new Cost(150, 120, 0, 0, 50, 0, 0), 4));
         buildings.put("PORT", new BuildingSpec("PORT", "Порт", "⚓", 3, new Cost(200, 150, 0, 50, 0, 0, 0), 6));
         buildings.put("TEMPLE", new BuildingSpec("TEMPLE", "Храм", "🛕", 4, new Cost(250, 200, 0, 0, 0, 30, 0), 8));
+
+        putUpgradeCosts("TOWN_HALL", Map.of(
+                2, new Cost(500, 400, 0, 0, 200, 0, 0),
+                3, new Cost(1200, 1000, 0, 0, 500, 0, 0),
+                4, new Cost(2500, 2000, 0, 500, 1000, 0, 0),
+                5, new Cost(5000, 4000, 0, 1000, 2000, 200, 0),
+                6, new Cost(10000, 8000, 0, 2000, 5000, 500, 0),
+                7, new Cost(20000, 15000, 0, 5000, 10000, 1000, 0)
+        ));
+        putUpgradeCosts("BARRACKS", Map.of(
+                2, new Cost(150, 100, 0, 50, 0, 0, 0),
+                3, new Cost(400, 300, 0, 150, 100, 0, 0)
+        ));
+        putUpgradeCosts("RANGE", Map.of(
+                2, new Cost(180, 120, 0, 60, 0, 0, 0),
+                3, new Cost(450, 350, 0, 180, 120, 0, 0)
+        ));
+        putUpgradeCosts("STABLE", Map.of(
+                2, new Cost(250, 200, 0, 80, 50, 0, 0),
+                3, new Cost(600, 500, 0, 200, 150, 0, 0)
+        ));
+        putUpgradeCosts("MINE", Map.of(
+                2, new Cost(200, 150, 0, 50, 0, 0, 0),
+                3, new Cost(500, 400, 0, 150, 0, 0, 0)
+        ));
+        putUpgradeCosts("FARM", Map.of(
+                2, new Cost(150, 100, 0, 0, 0, 0, 0),
+                3, new Cost(400, 300, 0, 0, 50, 0, 0)
+        ));
+        putUpgradeCosts("TAVERN", Map.of(
+                2, new Cost(200, 150, 0, 0, 50, 0, 0),
+                3, new Cost(500, 400, 0, 0, 150, 0, 0)
+        ));
 
         unitsByFaction.put(Faction.KNIGHTS, List.of(
                 new UnitSpec("SWORDSMAN", "Мечник", 1, "BARRACKS", new Cost(0, 0, 20, 0, 10, 0, 0), 5),
@@ -66,8 +100,39 @@ public class GameCatalog {
         ));
     }
 
+    private void putUpgradeCosts(String key, Map<Integer, Cost> levels) {
+        buildingUpgradeCosts.put(key, new LinkedHashMap<>(levels));
+    }
+
     public Map<String, BuildingSpec> buildings() {
         return buildings;
+    }
+
+    public Cost upgradeCost(String buildingKey, int toLevel) {
+        Map<Integer, Cost> levels = buildingUpgradeCosts.get(buildingKey);
+        if (levels == null) {
+            return null;
+        }
+        return levels.get(toLevel);
+    }
+
+    public int maxBuildingLevel(String buildingKey) {
+        if ("TOWN_HALL".equals(buildingKey)) {
+            return 7;
+        }
+        return 3;
+    }
+
+    public String townHallUnlocks(int toLevel) {
+        return switch (toLevel) {
+            case 2 -> "Рынок, Порт";
+            case 3 -> "Храм";
+            case 4 -> "Улучшенные войска";
+            case 5 -> "Эпические события";
+            case 6 -> "Дипломатия";
+            case 7 -> "Мировое доминирование";
+            default -> "Новые возможности";
+        };
     }
 
     public List<UnitSpec> unitsForFaction(Faction faction) {
@@ -113,12 +178,26 @@ public class GameCatalog {
 
     public String itemDisplay(String key) {
         return switch (key) {
-            case "BLUEPRINT_PISTOL" -> "📜 Чертёж пистолета";
-            case "BLUEPRINT_CANNON" -> "📜 Чертёж пушки";
-            case "BLUEPRINT_CROSSBOW" -> "📜 Чертёж усиленного арбалета";
+            case "BLUEPRINT_WOODEN_SHIELD" -> "📜 Чертёж деревянного щита";
+            case "BLUEPRINT_SIMPLE_BOW" -> "📜 Чертёж простого лука";
+            case "BLUEPRINT_LEATHER_VEST" -> "📜 Чертёж кожаного жилета";
+            case "BLUEPRINT_PISTOL" -> "📘 Чертёж пистолета";
+            case "BLUEPRINT_CROSSBOW" -> "📘 Чертёж арбалета";
+            case "BLUEPRINT_CATAPULT" -> "📘 Чертёж катапульты";
+            case "BLUEPRINT_CANNON" -> "📕 Чертёж пушки";
+            case "BLUEPRINT_FLAMETHROWER" -> "📕 Чертёж огнемёта";
+            case "BLUEPRINT_MITHRIL_ARMOR" -> "📕 Чертёж мифриловой брони";
+
+            case "CRAFTED_WOODEN_SHIELD" -> "🛡️ Деревянный щит";
+            case "CRAFTED_SIMPLE_BOW" -> "🏹 Простой лук";
+            case "LEATHER_VEST_ARMOR" -> "🧥 Кожаный жилет";
             case "CRAFTED_PISTOL" -> "🔫 Пистолет";
             case "CRAFTED_CANNON" -> "💣 Пушка";
             case "CRAFTED_CROSSBOW" -> "🏹 Усиленный арбалет";
+            case "CRAFTED_CATAPULT" -> "🏰 Катапульта";
+            case "CRAFTED_FLAMETHROWER" -> "🔥 Огнемёт";
+            case "MITHRIL_ARMOR" -> "🛡️ Мифриловая броня";
+
             case "LEATHER_ARMOR" -> "🟫 Кожаная броня";
             case "CHAINMAIL_ARMOR" -> "⚪ Кольчуга";
             case "IRON_ARMOR" -> "⚫ Железная броня";
@@ -126,6 +205,27 @@ public class GameCatalog {
             case "DIAMOND_ARMOR" -> "💎 Алмазная броня";
             case "NETHERITE_ARMOR" -> "🌑 Незеритовая броня";
             default -> key;
+        };
+    }
+
+    public String itemDescription(String key) {
+        return switch (key) {
+            case "CRAFTED_PISTOL" -> "+15% урон в следующем авто бою";
+            case "CRAFTED_CANNON" -> "+20% защита в авто бою";
+            case "CRAFTED_CROSSBOW" -> "+10% шанс победы в авто бою";
+            case "CRAFTED_FLAMETHROWER" -> "+30% урон в следующем авто бою";
+            case "CRAFTED_WOODEN_SHIELD" -> "+5% защита в бою";
+            case "CRAFTED_SIMPLE_BOW" -> "+5% урон лучников";
+            case "CRAFTED_CATAPULT" -> "+25% защита города";
+            case "LEATHER_VEST_ARMOR" -> "+3% защита (пассивно когда надета)";
+            case "LEATHER_ARMOR" -> "+5% защита (пассивно когда надета)";
+            case "CHAINMAIL_ARMOR" -> "+10% защита (пассивно когда надета)";
+            case "IRON_ARMOR" -> "+20% защита (пассивно когда надета)";
+            case "GOLD_ARMOR" -> "+30% защита (пассивно когда надета)";
+            case "DIAMOND_ARMOR" -> "+40% защита (пассивно когда надета)";
+            case "NETHERITE_ARMOR" -> "+50% защита (пассивно когда надета)";
+            case "MITHRIL_ARMOR" -> "+45% защита (пассивно когда надета)";
+            default -> "Предмет без подробного описания";
         };
     }
 }

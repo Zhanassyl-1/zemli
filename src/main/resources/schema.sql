@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS players (
     village_name TEXT NOT NULL,
     faction TEXT NOT NULL,
     city_level INTEGER NOT NULL DEFAULT 1,
+    morale INTEGER NOT NULL DEFAULT 100,
     builders_count INTEGER NOT NULL DEFAULT 1,
     has_cannon INTEGER NOT NULL DEFAULT 0,
     has_armor INTEGER NOT NULL DEFAULT 0,
@@ -173,6 +174,7 @@ ALTER TABLE players DROP COLUMN protection_expires;
 ALTER TABLE players DROP COLUMN is_protected;
 ALTER TABLE players DROP COLUMN attack_cooldown_expires;
 ALTER TABLE buildings DROP COLUMN upgrade_finishes_at;
+ALTER TABLE players ADD COLUMN morale INTEGER NOT NULL DEFAULT 100;
 ALTER TABLE players ADD COLUMN builders_count INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE players ADD COLUMN has_cannon INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE players ADD COLUMN has_armor INTEGER NOT NULL DEFAULT 0;

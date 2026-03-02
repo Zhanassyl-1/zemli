@@ -42,6 +42,14 @@ public class GameScheduler {
         log.info("Passive resource tick completed, players affected={}", affected);
     }
 
+    @Scheduled(cron = "0 0 * * * *", zone = "${game.time-zone:UTC}")
+    public void moraleDecayTick() {
+        int affected = gameDao.applyInactivityMoraleDecay();
+        if (affected > 0) {
+            log.info("Morale inactivity decay applied for players={}", affected);
+        }
+    }
+
     @Scheduled(cron = "0 0 20 * * *", zone = "${game.time-zone:UTC}")
     public void dailyDigest() {
         announcementService.sendDailyDigest();

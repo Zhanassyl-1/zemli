@@ -479,6 +479,60 @@ public class GameDao {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    public int loadMorale(long playerId) {
+        Integer morale = jdbcTemplate.queryForObject(
+                "SELECT morale FROM players WHERE id = ?",
+                Integer.class,
+                playerId
+        );
+        return morale == null ? 100 : Math.max(0, Math.min(100, morale));
+    }
+
+    public void setMorale(long playerId, int morale) {
+        jdbcTemplate.update(
+                "UPDATE players SET morale = ? WHERE id = ?",
+                Math.max(0, Math.min(100, morale)),
+                playerId
+        );
+    }
+
+    public int changeMorale(long playerId, int delta) {
+        int next = Math.max(0, Math.min(100, loadMorale(playerId) + delta));
+        setMorale(playerId, next);
+        return next;
+    }
+
+    public void touchActivity(long playerId) {
+        setPlayerState(playerId, "LAST_ACTIVE_AT", Instant.now().toEpochMilli());
+    }
+
+    public boolean isPassiveBuildingActive(long playerId, String buildingKey) {
+        Long state = getPlayerState(playerId, "PASSIVE_ACTIVE_" + buildingKey);
+        return state == null || state == 1L;
+    }
+
+    public void setPassiveBuildingActive(long playerId, String buildingKey, boolean active) {
+        setPlayerState(playerId, "PASSIVE_ACTIVE_" + buildingKey, active ? 1L : 0L);
+    }
+
+    public int applyInactivityMoraleDecay() {
+        long now = Instant.now().toEpochMilli();
+        int affected = 0;
+        for (PlayerRecord player : allPlayers()) {
+            Long lastActive = getPlayerState(player.id(), "LAST_ACTIVE_AT");
+            Long lastDecay = getPlayerState(player.id(), "MORALE_LAST_DECAY_AT");
+            long activityMark = lastActive == null ? player.createdAt() : lastActive;
+            boolean inactiveForDay = now - activityMark >= 24L * 60L * 60L * 1000L;
+            boolean canDecayAgain = lastDecay == null || now - lastDecay >= 24L * 60L * 60L * 1000L;
+            if (inactiveForDay && canDecayAgain) {
+                changeMorale(player.id(), -5);
+                setPlayerState(player.id(), "MORALE_LAST_DECAY_AT", now);
+                affected++;
+            }
+        }
+        return affected;
+    }
+
     @Transactional
     public int applyPassiveIncomeTick() {
         return applyPassiveIncomeTick(1.0);
@@ -492,11 +546,17 @@ public class GameDao {
             Map<String, BuildingState> levels = loadBuildingMap(player.id());
             int mineLvl = levels.getOrDefault("MINE", new BuildingState("MINE", 0)).level();
             int farmLvl = levels.getOrDefault("FARM", new BuildingState("FARM", 0)).level();
+            int tavernLvl = levels.getOrDefault("TAVERN", new BuildingState("TAVERN", 0)).level();
+            int morale = loadMorale(player.id());
+            boolean mineActive = isPassiveBuildingActive(player.id(), "MINE");
+            boolean farmActive = isPassiveBuildingActive(player.id(), "FARM");
 
-            int woodIncome = (int) Math.floor(5 * multiplier);
-            int stoneIncome = (int) Math.floor((3 + passiveBonusByLevel(mineLvl, 3)) * multiplier);
-            int foodIncome = (int) Math.floor((4 + passiveBonusByLevel(farmLvl, 3)) * multiplier);
-            int ironIncome = (int) Math.floor(passiveBonusByLevel(mineLvl, 2) * multiplier);
+            double moraleMul = morale < 20 ? 0.70 : 1.0;
+            int woodIncome = (int) Math.floor(5 * multiplier * moraleMul);
+            int stoneIncome = mineActive ? (int) Math.floor((3 + passiveBonusByLevel(mineLvl, 3)) * multiplier * moraleMul) : 0;
+            int foodIncome = farmActive ? (int) Math.floor((4 + passiveBonusByLevel(farmLvl, 3)) * multiplier * moraleMul) : 0;
+            int ironIncome = mineActive ? (int) Math.floor(passiveBonusByLevel(mineLvl, 2) * multiplier * moraleMul) : 0;
+            int alcoholIncome = tavernLvl > 0 ? (int) Math.floor((1 + (tavernLvl - 1)) * multiplier * moraleMul) : 0;
 
             jdbcTemplate.update(
                     """
@@ -504,13 +564,15 @@ public class GameDao {
                     SET wood = wood + ?,
                         stone = stone + ?,
                         food = food + ?,
-                        iron = iron + ?
+                        iron = iron + ?,
+                        alcohol = alcohol + ?
                     WHERE player_id = ?
                     """,
                     woodIncome,
                     stoneIncome,
                     foodIncome,
                     ironIncome,
+                    alcoholIncome,
                     player.id()
             );
             updated++;

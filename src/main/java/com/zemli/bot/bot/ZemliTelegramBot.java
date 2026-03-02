@@ -49,11 +49,13 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private static final String CODE_ALL_ITEMS = "Wd8sG2xP5e";
     private static final String CODE_RESET = "Yj3kM9vB4r";
     private static final Map<String, Double> ARMOR_DEFENSE_BONUS = Map.of(
+            "LEATHER_VEST_ARMOR", 0.03,
             "LEATHER_ARMOR", 0.05,
             "CHAINMAIL_ARMOR", 0.10,
             "IRON_ARMOR", 0.20,
             "GOLD_ARMOR", 0.30,
             "DIAMOND_ARMOR", 0.40,
+            "MITHRIL_ARMOR", 0.45,
             "NETHERITE_ARMOR", 0.50
     );
 
@@ -258,6 +260,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private void handleMessage(Message message) {
         long chatId = message.getChatId();
         long tgId = message.getFrom().getId();
+        touchPlayerActivity(tgId);
         String text = message.getText().replace("\"", "").trim();
         if (text.startsWith("/")) {
             handleCommandText(message, tgId, text);
@@ -625,6 +628,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private void handleCallback(CallbackQuery callback) {
         String data = callback.getData();
         long tgId = callback.getFrom().getId();
+        touchPlayerActivity(tgId);
         long chatId = callback.getMessage().getChatId();
 
         if (data.startsWith("faction:pick:")) {
@@ -747,8 +751,10 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         int rank = gameDao.rankByCityLevel(player.id());
         int power = getPlayerPower(player.id());
         int gold = gameDao.loadResources(player.id()).gold();
+        int morale = gameDao.loadMorale(player.id());
         String text = "🏕️ " + player.villageName() + " | " + player.faction().getTitle() + " | Ур." + player.cityLevel() + "\n" +
-                "💰 Золото: " + gold + " | ⚔️ Мощь: " + power + " | 🏆 #" + rank + " в рейтинге";
+                "💰 Золото: " + gold + " | ⚔️ Мощь: " + power + " | 🏆 #" + rank + " в рейтинге\n" +
+                moraleLine(morale);
 
         sendText(chatId, text,
                 InlineKeyboardMarkup.builder()
@@ -803,10 +809,15 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private void showBuildTab(long chatId, PlayerRecord player, String tab) {
         Map<String, BuildingState> current = gameDao.loadBuildingMap(player.id());
+        ResourcesRecord resources = gameDao.loadResources(player.id());
+        int morale = gameDao.loadMorale(player.id());
         StringBuilder text = new StringBuilder("🏗️ Строительство (мгновенно)\n\n");
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
 
         rows.add(List.of(btn("🔨 Построить", "build:tab:new"), btn("⬆️ Улучшить", "build:tab:up")));
+        if (morale < 50) {
+            text.append(moraleRestrictionText(morale)).append("\n\n");
+        }
 
         if ("new".equals(tab)) {
             for (GameCatalog.BuildingSpec spec : catalog.buildings().values()) {
@@ -816,15 +827,38 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 if (current.containsKey(spec.key()) || player.cityLevel() < spec.requiredCityLevel()) {
                     continue;
                 }
-                rows.add(List.of(btn("🔨 " + spec.title() + " " + costText(spec.cost()), "build:new:" + spec.key())));
+                text.append(spec.emoji()).append(" ").append(spec.title()).append(" ур.1\n");
+                text.append("Цена постройки: ").append(costText(spec.cost())).append("\n");
+                text.append(playerResourcesLine(resources, spec.cost())).append("\n\n");
+                boolean enough = hasEnough(resources, spec.cost());
+                rows.add(List.of(btn((enough ? "🔨 " : "⛔ ") + spec.title(), enough ? "build:new:" + spec.key() : "build:blocked:new:" + spec.key())));
             }
         } else if ("up".equals(tab)) {
             for (GameCatalog.BuildingSpec spec : catalog.buildings().values()) {
                 BuildingState st = current.get(spec.key());
-                if (st == null || st.level() < 1 || st.level() >= 3) {
+                if (st == null || st.level() < 1) {
                     continue;
                 }
-                rows.add(List.of(btn("⬆️ " + spec.title() + " ур." + st.level() + " → " + (st.level() + 1), "build:up:" + spec.key())));
+                int toLevel = st.level() + 1;
+                if (toLevel > catalog.maxBuildingLevel(spec.key())) {
+                    continue;
+                }
+                GameCatalog.Cost upCost = catalog.upgradeCost(spec.key(), toLevel);
+                if (upCost == null) {
+                    continue;
+                }
+                if ("TOWN_HALL".equals(spec.key())) {
+                    text.append("🏠 ").append(spec.title()).append(" ур.").append(st.level()).append(" → ур.").append(toLevel).append("\n");
+                    text.append("Нужно: ").append(costText(upCost)).append("\n");
+                    text.append("Откроет: ").append(catalog.townHallUnlocks(toLevel)).append("\n");
+                    text.append(playerResourcesLine(resources, upCost)).append("\n\n");
+                } else {
+                    text.append(spec.emoji()).append(" ").append(spec.title()).append(" ур.").append(st.level()).append("\n");
+                    text.append("⬆️ До ур.").append(toLevel).append(" стоит: ").append(costText(upCost)).append("\n");
+                    text.append(playerResourcesLine(resources, upCost)).append("\n\n");
+                }
+                boolean enough = hasEnough(resources, upCost);
+                rows.add(List.of(btn((enough ? "⬆️ " : "⛔ ") + spec.title() + " → ур." + toLevel, enough ? "build:up:" + spec.key() : "build:blocked:up:" + spec.key())));
             }
         } else {
             text.append("Все здания строятся и улучшаются мгновенно.\n");
@@ -850,6 +884,31 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
 
+        int morale = gameDao.loadMorale(player.id());
+        if (morale < 50) {
+            sendText(chatId, moraleRestrictionText(morale));
+            return;
+        }
+
+        if ("blocked".equals(p[1]) && p.length >= 4) {
+            String key = p[3];
+            GameCatalog.BuildingSpec spec = catalog.buildings().get(key);
+            if (spec == null) {
+                return;
+            }
+            GameCatalog.Cost cost;
+            if ("new".equals(p[2])) {
+                cost = spec.cost();
+            } else {
+                BuildingState st = gameDao.loadBuilding(player.id(), key).orElse(null);
+                if (st == null) return;
+                cost = catalog.upgradeCost(key, st.level() + 1);
+            }
+            if (cost == null) return;
+            sendText(chatId, "❌ Не хватает: " + missingResourcesLine(gameDao.loadResources(player.id()), cost));
+            return;
+        }
+
         String action = p[1];
         String key = p[2];
         GameCatalog.BuildingSpec spec = catalog.buildings().get(key);
@@ -859,16 +918,27 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
         if ("new".equals(action)) {
             if (!gameDao.spendResources(player.id(), spec.cost())) {
-                sendText(chatId, "Недостаточно ресурсов", menuService.mainMenu());
+                sendText(chatId, "❌ Не хватает: " + missingResourcesLine(gameDao.loadResources(player.id()), spec.cost()), menuService.mainMenu());
                 return;
             }
             gameDao.buildInstant(player.id(), key);
+            gameDao.changeMorale(player.id(), 5);
             sendText(chatId, "Строительство: " + spec.title(), menuService.mainMenu());
             return;
         }
 
-        if (!gameDao.spendResources(player.id(), spec.cost())) {
-            sendText(chatId, "Недостаточно ресурсов", menuService.mainMenu());
+        BuildingState current = gameDao.loadBuilding(player.id(), key).orElse(null);
+        if (current == null) {
+            sendText(chatId, "Сначала построй здание.", menuService.mainMenu());
+            return;
+        }
+        GameCatalog.Cost upCost = catalog.upgradeCost(key, current.level() + 1);
+        if (upCost == null) {
+            sendText(chatId, "Здание уже максимального уровня.", menuService.mainMenu());
+            return;
+        }
+        if (!gameDao.spendResources(player.id(), upCost)) {
+            sendText(chatId, "❌ Не хватает: " + missingResourcesLine(gameDao.loadResources(player.id()), upCost), menuService.mainMenu());
             return;
         }
         gameDao.upgradeBuildingInstant(player.id(), key);
@@ -953,19 +1023,56 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     }
 
     private void showMineMenu(long chatId, PlayerRecord player) {
-        Long cd = gameDao.getPlayerState(player.id(), "MINE_COOLDOWN_UNTIL");
+        Map<String, BuildingState> bmap = gameDao.loadBuildingMap(player.id());
+        int mineLvl = bmap.getOrDefault("MINE", new BuildingState("MINE", 0)).level();
+        int farmLvl = bmap.getOrDefault("FARM", new BuildingState("FARM", 0)).level();
+        boolean mineActive = gameDao.isPassiveBuildingActive(player.id(), "MINE");
+        boolean farmActive = gameDao.isPassiveBuildingActive(player.id(), "FARM");
         long now = Instant.now().toEpochMilli();
-        if (cd != null && cd > now) {
-            sendText(chatId, harvestCooldownText(cd - now));
-            return;
+        long nextTickMs = nextPassiveTickEpoch(now);
+
+        int stoneTick = (int) Math.floor(3 + passiveBonusByLevel(mineLvl, 3));
+        int ironTick = (int) Math.floor(passiveBonusByLevel(mineLvl, 2));
+        int foodTick = (int) Math.floor(4 + passiveBonusByLevel(farmLvl, 3));
+
+        StringBuilder text = new StringBuilder();
+        text.append("⛏️ Шахта ур.").append(mineLvl).append("\n");
+        text.append("Статус: ").append(mineActive ? "✅ Активна" : "❌ Не активна").append("\n");
+        if (mineActive) {
+            text.append("Добывает каждые 10 мин:\n");
+            text.append("⚔️ Железо: +").append(ironTick).append("\n");
+            text.append("🪨 Камень: +").append(stoneTick).append("\n");
+            text.append("Следующая добыча через: ").append(harvestCooldownText(Math.max(0L, nextTickMs - now)).replace("⏳ Следующая добыча через: ", "")).append("\n");
         }
-        sendText(chatId, "⛏️ Активная добыча готова.", InlineKeyboardMarkup.builder()
-                .keyboardRow(List.of(btn("⛏️ Добыть", "mine:collect")))
+
+        text.append("\n🌾 Ферма ур.").append(farmLvl).append("\n");
+        text.append("Статус: ").append(farmActive ? "✅ Активна" : "❌ Не активна").append("\n");
+        if (farmActive) {
+            text.append("Добывает каждые 10 мин:\n");
+            text.append("🌾 Еда: +").append(foodTick).append("\n");
+        }
+
+        Long cd = gameDao.getPlayerState(player.id(), "MINE_COOLDOWN_UNTIL");
+        if (cd != null && cd > now) {
+            text.append("\n").append(harvestCooldownText(cd - now)).append("\n");
+        }
+
+        sendText(chatId, text.toString(), InlineKeyboardMarkup.builder()
+                .keyboardRow(List.of(btn(mineActive ? "⚙️ Деактивировать шахту" : "✅ Активировать шахту", "mine:toggle:MINE")))
+                .keyboardRow(List.of(btn(farmActive ? "⚙️ Деактивировать ферму" : "✅ Активировать ферму", "mine:toggle:FARM")))
+                .keyboardRow(List.of(btn("⛏️ Активная добыча", "mine:collect")))
                 .keyboardRow(List.of(btn("◀️ Назад", "menu:city")))
                 .build());
     }
 
     private void handleMineCallbacks(long chatId, PlayerRecord player, String data) {
+        if (data.startsWith("mine:toggle:")) {
+            String building = data.substring("mine:toggle:".length());
+            boolean active = gameDao.isPassiveBuildingActive(player.id(), building);
+            gameDao.setPassiveBuildingActive(player.id(), building, !active);
+            showMineMenu(chatId, player);
+            return;
+        }
         if (!"mine:collect".equals(data)) {
             showMineMenu(chatId, player);
             return;
@@ -997,6 +1104,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
         gameDao.addResources(player.id(), new GameCatalog.Cost(wood, stone, food, iron, 0, 0, 0));
         gameDao.setPlayerState(player.id(), "MINE_COOLDOWN_UNTIL", Instant.now().plusSeconds(10 * 60L).toEpochMilli());
+        gameDao.changeMorale(player.id(), 5);
 
         String msg = "✅ Добыто:\n🪵 +" + wood + "\n🪨 +" + stone + "\n🌾 +" + food + "\n⚔️ +" + iron;
         maybeDropBlueprint(player);
@@ -1036,13 +1144,19 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             PlayerRecord defender = def.get();
             int aPow = getPlayerPower(attacker.id());
             int dPow = getPlayerPower(defender.id());
-            double chance = baseAttackChance(aPow, dPow);
+            double chance = baseAttackChance(attacker, defender);
             sendText(chatId,
-                    "⚔️ Цель: " + defender.villageName() + "\n" +
-                            "Твоя мощь: " + aPow + " | Мощь врага: " + dPow + "\n" +
-                            "Шанс победы: " + String.format("%.1f", chance) + "%\n" +
-                            "━━━━━━━━━━━━━━━\n" +
-                            "Выбери тип атаки:",
+                    "⚔️ Выбери тип атаки на " + defender.villageName() + ":\n" +
+                            "━━━━━━━━━━━━\n" +
+                            "⚔️ БРОСИТЬ ВЫЗОВ\n" +
+                            "Пошаговый бой, враг может принять или отклонить.\n" +
+                            "Победа: забираешь 30% ресурсов\n" +
+                            "Риск: враг может отбиться тактикой\n\n" +
+                            "🎲 БЫСТРЫЙ НАБЕГ\n" +
+                            "Мгновенный авто бой по шансам, враг не знает.\n" +
+                            "Победа: забираешь 20% ресурсов\n" +
+                            "Твой шанс: " + String.format("%.1f", chance) + "%\n" +
+                            "━━━━━━━━━━━━",
                     InlineKeyboardMarkup.builder()
                             .keyboardRow(List.of(btn("⚔️ Бросить вызов", "attack:challenge:" + defender.id()), btn("🎲 Быстрый набег", "attack:raid:" + defender.id())))
                             .keyboardRow(List.of(btn("◀️ Назад", "menu:attack")))
@@ -1071,7 +1185,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             int rounds = ThreadLocalRandom.current().nextInt(5, 8);
             long battleId = gameDao.createBattle(attacker.id(), defender.id(), aHp, dHp, rounds, "WAITING_CHALLENGE");
 
-            double holdChance = 100.0 - baseAttackChance(aPow, dPow);
+            double holdChance = 100.0 - baseAttackChance(attacker, defender);
             sendText(defender.telegramId(),
                     "⚔️ " + attacker.villageName() + " бросает тебе вызов!\n" +
                             "Мощь врага: " + aPow + " | Твоя мощь: " + dPow + "\n" +
@@ -1438,6 +1552,8 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         long winnerId = aHp >= dHp ? a.id() : d.id();
         PlayerRecord winner = winnerId == a.id() ? a : d;
         PlayerRecord loser = winnerId == a.id() ? d : a;
+        gameDao.changeMorale(winner.id(), 10);
+        gameDao.changeMorale(loser.id(), -15);
 
         int stolenWood = 0;
         int stolenStone = 0;
@@ -1534,6 +1650,19 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         return ((double) aPow / (aPow + dPow)) * 100.0;
     }
 
+    private double baseAttackChance(PlayerRecord attacker, PlayerRecord defender) {
+        double chance = baseAttackChance(getPlayerPower(attacker.id()), getPlayerPower(defender.id()));
+        int aMorale = gameDao.loadMorale(attacker.id());
+        int dMorale = gameDao.loadMorale(defender.id());
+        if (aMorale >= 80) {
+            chance += 5.0;
+        }
+        if (dMorale >= 80) {
+            chance -= 5.0;
+        }
+        return Math.max(3.0, Math.min(97.0, chance));
+    }
+
     private void resolveQuickRaid(long battleId, PlayerRecord attacker, PlayerRecord defender, boolean fromChallengeTimeout, String raidItem) {
         int aPow = getPlayerPower(attacker.id());
         int dPow = getPlayerPower(defender.id());
@@ -1548,6 +1677,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 case "PISTOL" -> gameDao.inventoryQuantity(attacker.id(), "CRAFTED_PISTOL") > 0;
                 case "CANNON" -> gameDao.inventoryQuantity(attacker.id(), "CRAFTED_CANNON") > 0;
                 case "CROSSBOW" -> gameDao.inventoryQuantity(attacker.id(), "CRAFTED_CROSSBOW") > 0;
+                case "FLAMETHROWER" -> gameDao.inventoryQuantity(attacker.id(), "CRAFTED_FLAMETHROWER") > 0;
                 default -> false;
             };
             if (!hadItem) {
@@ -1560,6 +1690,8 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         boolean attackerWin = ThreadLocalRandom.current().nextDouble(0.0, 100.0) < chance;
         PlayerRecord winner = attackerWin ? attacker : defender;
         PlayerRecord loser = attackerWin ? defender : attacker;
+        gameDao.changeMorale(winner.id(), 10);
+        gameDao.changeMorale(loser.id(), -15);
         int winnerLossPercent = rand(10, 20);
         int loserLossPercent = rand(30, 50);
         List<GameDao.ArmyLoss> winnerLosses = gameDao.applyArmyLossPercent(winner.id(), winnerLossPercent);
@@ -1700,26 +1832,108 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private void showInventory(long chatId, PlayerRecord player) {
         List<KeyValueAmount> inv = gameDao.loadInventory(player.id());
+        ResourcesRecord res = gameDao.loadResources(player.id());
         if (inv.isEmpty()) {
-            sendText(chatId, "🎒 Инвентарь пуст", menuService.mainMenu());
+            sendText(chatId,
+                    "🎒 ИНВЕНТАРЬ\n" +
+                            "Пусто. Как получить предметы:\n" +
+                            "━━━━━━━━━━━━\n" +
+                            "⛏️ Добывай ресурсы — шанс найти чертёж\n" +
+                            "📜 Чертёж → иди в 🔨 Крафт → создай предмет\n" +
+                            "⚔️ Предметы используются в бою для бонусов:\n" +
+                            "🔫 Пистолет — +15% урон в авто бою\n" +
+                            "💣 Пушка — +20% защита в авто бою\n" +
+                            "🏹 Арбалет — +10% шанс победы\n" +
+                            "🛡️ Броня — надевается и даёт постоянную защиту",
+                    InlineKeyboardMarkup.builder()
+                            .keyboardRow(List.of(btn("🍺 Поднять мораль (+20)", "inv:morale:drink")))
+                            .keyboardRow(List.of(btn("◀️ Назад", "menu:city")))
+                            .build());
             return;
         }
-        StringBuilder sb = new StringBuilder("🎒 Инвентарь\n");
+        StringBuilder sb = new StringBuilder("🎒 ИНВЕНТАРЬ\n");
         if (player.equippedArmor() != null) {
-            sb.append("Надето: ").append(catalog.itemDisplay(player.equippedArmor())).append("\n\n");
+            sb.append("Надето: ").append(catalog.itemDisplay(player.equippedArmor())).append("\n");
         }
+        sb.append("🍺 Алкоголь в ресурсах: ").append(res.alcohol()).append("\n\n");
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         inv.stream().sorted(Comparator.comparing(KeyValueAmount::type)).forEach(it -> {
-            sb.append("- ").append(catalog.itemDisplay(it.type())).append(": ").append(it.quantity()).append("\n");
+            sb.append(catalog.itemDisplay(it.type())).append(" x").append(it.quantity()).append("\n");
+            sb.append(catalog.itemDescription(it.type())).append("\n");
             if (isArmor(it.type()) && it.quantity() > 0) {
-                rows.add(List.of(btn("🛡️ Надеть " + catalog.itemDisplay(it.type()), "inv:equip:armor:" + it.type())));
+                boolean equipped = it.type().equals(player.equippedArmor());
+                sb.append("Статус: ").append(equipped ? "✅ Надета" : "❌ Не надета").append("\n");
+                if (!equipped) {
+                    rows.add(List.of(btn("✅ Надеть", "inv:equip:armor:" + it.type()), btn("💰 Продать", "inv:sell:" + it.type())));
+                } else {
+                    rows.add(List.of(btn("💰 Продать", "inv:sell:" + it.type())));
+                }
+            } else {
+                rows.add(List.of(btn("🎲 Использовать в набеге", "inv:raid:" + it.type()), btn("💰 Продать", "inv:sell:" + it.type())));
             }
+            rows.add(List.of(btn("🔨 Аукцион", "inv:auction:" + it.type())));
+            sb.append("\n");
         });
+        rows.add(List.of(btn("🍺 Поднять мораль (+20)", "inv:morale:drink")));
         rows.add(List.of(btn("◀️ Назад", "menu:city")));
         sendText(chatId, sb.toString(), InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
     private void handleInventoryCallbacks(long chatId, PlayerRecord player, String data) {
+        if (data.startsWith("inv:morale:drink")) {
+            long todayKey = Long.parseLong(DailyEventType.todayUtc().replace("-", ""));
+            Long usedDay = gameDao.getPlayerState(player.id(), "ALCOHOL_USED_DAY");
+            if (usedDay == null || usedDay != todayKey) {
+                gameDao.setPlayerState(player.id(), "ALCOHOL_USED_DAY", todayKey);
+                gameDao.setPlayerState(player.id(), "ALCOHOL_USED_COUNT", 0);
+            }
+            long used = gameDao.getPlayerState(player.id(), "ALCOHOL_USED_COUNT") == null ? 0 : gameDao.getPlayerState(player.id(), "ALCOHOL_USED_COUNT");
+            ResourcesRecord r = gameDao.loadResources(player.id());
+            if (used >= 3) {
+                sendText(chatId, "Сегодня лимит выпивки исчерпан (3/3).", menuService.mainMenu());
+                return;
+            }
+            if (r.alcohol() <= 0) {
+                sendText(chatId, "Нужно минимум 1 🍺 алкоголя.", menuService.mainMenu());
+                return;
+            }
+            gameDao.spendResources(player.id(), new GameCatalog.Cost(0, 0, 0, 0, 0, 0, 1));
+            int morale = gameDao.changeMorale(player.id(), 20);
+            gameDao.setPlayerState(player.id(), "ALCOHOL_USED_COUNT", used + 1);
+            gameDao.touchActivity(player.id());
+            sendText(chatId, "🍺 Боевой дух поднят! Мораль: " + morale + "/100", menuService.mainMenu());
+            return;
+        }
+        if (data.startsWith("inv:sell:")) {
+            String item = data.substring("inv:sell:".length());
+            if (!gameDao.removeInventoryItem(player.id(), item, 1)) {
+                sendText(chatId, "Этого предмета нет в инвентаре.", menuService.mainMenu());
+                return;
+            }
+            int price = sellPrice(item);
+            gameDao.addResources(player.id(), new GameCatalog.Cost(0, 0, 0, 0, price, 0, 0));
+            sendText(chatId, "💰 Продано за " + price + " золота.", menuService.mainMenu());
+            return;
+        }
+        if (data.startsWith("inv:auction:")) {
+            String item = data.substring("inv:auction:".length());
+            if (!gameDao.removeInventoryItem(player.id(), item, 1)) {
+                sendText(chatId, "Этого предмета нет в инвентаре.", menuService.mainMenu());
+                return;
+            }
+            int startPrice = Math.max(100, sellPrice(item));
+            gameDao.createAuction(player.id(), item, startPrice, Instant.now().plusSeconds(12 * 3600L).toEpochMilli());
+            sendText(chatId, "🔨 Лот выставлен на аукцион. Старт: " + startPrice + "💰", menuService.mainMenu());
+            return;
+        }
+        if (data.startsWith("inv:raid:")) {
+            String item = data.substring("inv:raid:".length());
+            sendText(chatId,
+                    "Предмет " + catalog.itemDisplay(item) + " готов к использованию.\n" +
+                            "Открой ⚔️ Атаковать → выбери цель → 🎲 Быстрый набег.",
+                    menuService.mainMenu());
+            return;
+        }
         if (data.startsWith("inv:equip:armor:")) {
             String armor = data.substring("inv:equip:armor:".length());
             if (!isArmor(armor) || !gameDao.hasInventoryItem(player.id(), armor)) {
@@ -1751,25 +1965,30 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private void showCraftMenu(long chatId, PlayerRecord player) {
         ResourcesRecord r = gameDao.loadResources(player.id());
-        int bpPistol = gameDao.inventoryQuantity(player.id(), "BLUEPRINT_PISTOL");
-        int bpCannon = gameDao.inventoryQuantity(player.id(), "BLUEPRINT_CANNON");
-        int bpCrossbow = gameDao.inventoryQuantity(player.id(), "BLUEPRINT_CROSSBOW");
-
-        StringBuilder txt = new StringBuilder("🔨 МАСТЕРСКАЯ\n━━━━━━━━━━━━\n📜 Твои чертежи:\n");
-        txt.append("- Чертёж пистолета х").append(bpPistol).append("\n");
-        txt.append("- Чертёж пушки х").append(bpCannon).append(bpCannon > 0 ? "" : " 🔒").append("\n");
-        txt.append("- Чертёж усиленного арбалета х").append(bpCrossbow).append(bpCrossbow > 0 ? "" : " 🔒").append("\n\n");
-
-        txt.append("🔫 Пистолет\nНужно: ⚔️50 💰30\nУ тебя: ⚔️").append(r.iron()).append(" 💰").append(r.gold()).append("\n\n");
-        txt.append("💣 Пушка\nНужно: 🪨100 ⚔️80 🪵60\n");
-        txt.append(bpCannon > 0 ? "" : "🔒 Нужен чертёж пушки\n");
-        txt.append("\n🏹 Усиленный арбалет\nНужно: 🪵80 ⚔️40\n");
-        txt.append(bpCrossbow > 0 ? "" : "🔒 Нужен чертёж усиленного арбалета\n");
-
+        StringBuilder txt = new StringBuilder("🔨 МАСТЕРСКАЯ\n━━━━━━━━━━━━\n");
+        txt.append("ОБЫЧНЫЕ:\n");
+        txt.append(recipeLine(player.id(), "BLUEPRINT_WOODEN_SHIELD", "CRAFTED_WOODEN_SHIELD", new GameCatalog.Cost(30, 0, 0, 10, 0, 0, 0))).append("\n");
+        txt.append(recipeLine(player.id(), "BLUEPRINT_SIMPLE_BOW", "CRAFTED_SIMPLE_BOW", new GameCatalog.Cost(40, 0, 0, 15, 0, 0, 0))).append("\n");
+        txt.append(recipeLine(player.id(), "BLUEPRINT_LEATHER_VEST", "LEATHER_VEST_ARMOR", new GameCatalog.Cost(20, 0, 0, 10, 0, 0, 0))).append("\n\n");
+        txt.append("РЕДКИЕ:\n");
+        txt.append(recipeLine(player.id(), "BLUEPRINT_PISTOL", "CRAFTED_PISTOL", new GameCatalog.Cost(0, 0, 0, 50, 30, 0, 0))).append("\n");
+        txt.append(recipeLine(player.id(), "BLUEPRINT_CROSSBOW", "CRAFTED_CROSSBOW", new GameCatalog.Cost(80, 0, 0, 40, 0, 0, 0))).append("\n");
+        txt.append(recipeLine(player.id(), "BLUEPRINT_CATAPULT", "CRAFTED_CATAPULT", new GameCatalog.Cost(60, 100, 0, 80, 0, 0, 0))).append("\n\n");
+        txt.append("ЛЕГЕНДАРНЫЕ:\n");
+        txt.append(recipeLine(player.id(), "BLUEPRINT_CANNON", "CRAFTED_CANNON", new GameCatalog.Cost(100, 150, 0, 120, 0, 0, 0))).append("\n");
+        txt.append(recipeLine(player.id(), "BLUEPRINT_FLAMETHROWER", "CRAFTED_FLAMETHROWER", new GameCatalog.Cost(0, 0, 0, 200, 100, 50, 0))).append("\n");
+        txt.append(recipeLine(player.id(), "BLUEPRINT_MITHRIL_ARMOR", "MITHRIL_ARMOR", new GameCatalog.Cost(0, 0, 0, 300, 200, 100, 0))).append("\n\n");
+        txt.append("Твои ресурсы: ").append(costText(new GameCatalog.Cost(r.wood(), r.stone(), r.food(), r.iron(), r.gold(), r.mana(), r.alcohol()))).append("\n");
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-        if (bpPistol > 0 && r.iron() >= 50 && r.gold() >= 30) rows.add(List.of(btn("🔨 Скрафтить пистолет", "craft:make:PISTOL")));
-        if (bpCannon > 0 && r.stone() >= 100 && r.iron() >= 80 && r.wood() >= 60) rows.add(List.of(btn("🔨 Скрафтить пушку", "craft:make:CANNON")));
-        if (bpCrossbow > 0 && r.wood() >= 80 && r.iron() >= 40) rows.add(List.of(btn("🔨 Скрафтить арбалет", "craft:make:CROSSBOW")));
+        addCraftButtonIfAvailable(rows, player.id(), "BLUEPRINT_WOODEN_SHIELD", "🔨 Щит", "WOODEN_SHIELD", new GameCatalog.Cost(30, 0, 0, 10, 0, 0, 0));
+        addCraftButtonIfAvailable(rows, player.id(), "BLUEPRINT_SIMPLE_BOW", "🔨 Лук", "SIMPLE_BOW", new GameCatalog.Cost(40, 0, 0, 15, 0, 0, 0));
+        addCraftButtonIfAvailable(rows, player.id(), "BLUEPRINT_LEATHER_VEST", "🔨 Жилет", "LEATHER_VEST", new GameCatalog.Cost(20, 0, 0, 10, 0, 0, 0));
+        addCraftButtonIfAvailable(rows, player.id(), "BLUEPRINT_PISTOL", "🔨 Пистолет", "PISTOL", new GameCatalog.Cost(0, 0, 0, 50, 30, 0, 0));
+        addCraftButtonIfAvailable(rows, player.id(), "BLUEPRINT_CROSSBOW", "🔨 Арбалет", "CROSSBOW", new GameCatalog.Cost(80, 0, 0, 40, 0, 0, 0));
+        addCraftButtonIfAvailable(rows, player.id(), "BLUEPRINT_CATAPULT", "🔨 Катапульта", "CATAPULT", new GameCatalog.Cost(60, 100, 0, 80, 0, 0, 0));
+        addCraftButtonIfAvailable(rows, player.id(), "BLUEPRINT_CANNON", "🔨 Пушка", "CANNON", new GameCatalog.Cost(100, 150, 0, 120, 0, 0, 0));
+        addCraftButtonIfAvailable(rows, player.id(), "BLUEPRINT_FLAMETHROWER", "🔨 Огнемёт", "FLAMETHROWER", new GameCatalog.Cost(0, 0, 0, 200, 100, 50, 0));
+        addCraftButtonIfAvailable(rows, player.id(), "BLUEPRINT_MITHRIL_ARMOR", "🔨 Мифриловая броня", "MITHRIL", new GameCatalog.Cost(0, 0, 0, 300, 200, 100, 0));
         rows.add(List.of(btn("◀️ Назад", "menu:city")));
         sendText(chatId, txt.toString(), InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
@@ -1781,60 +2000,59 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
         switch (p[2]) {
+            case "WOODEN_SHIELD" -> craftItem(chatId, player, "BLUEPRINT_WOODEN_SHIELD", "CRAFTED_WOODEN_SHIELD", new GameCatalog.Cost(30, 0, 0, 10, 0, 0, 0));
+            case "SIMPLE_BOW" -> craftItem(chatId, player, "BLUEPRINT_SIMPLE_BOW", "CRAFTED_SIMPLE_BOW", new GameCatalog.Cost(40, 0, 0, 15, 0, 0, 0));
+            case "LEATHER_VEST" -> craftItem(chatId, player, "BLUEPRINT_LEATHER_VEST", "LEATHER_VEST_ARMOR", new GameCatalog.Cost(20, 0, 0, 10, 0, 0, 0));
             case "PISTOL" -> {
-                if (gameDao.inventoryQuantity(player.id(), "BLUEPRINT_PISTOL") <= 0) {
-                    sendText(chatId, "Нужен чертёж пистолета.", menuService.mainMenu());
-                    return;
-                }
-                if (!gameDao.spendResources(player.id(), new GameCatalog.Cost(0, 0, 0, 50, 30, 0, 0))) {
-                    sendText(chatId, "Недостаточно ресурсов.", menuService.mainMenu());
-                    return;
-                }
-                gameDao.addInventoryItem(player.id(), "CRAFTED_PISTOL", 1);
-                sendText(chatId, "✅ Скрафчен: 🔫 Пистолет", menuService.mainMenu());
+                craftItem(chatId, player, "BLUEPRINT_PISTOL", "CRAFTED_PISTOL", new GameCatalog.Cost(0, 0, 0, 50, 30, 0, 0));
             }
             case "CANNON" -> {
-                if (gameDao.inventoryQuantity(player.id(), "BLUEPRINT_CANNON") <= 0) {
-                    sendText(chatId, "Нужен чертёж пушки.", menuService.mainMenu());
-                    return;
-                }
-                if (!gameDao.spendResources(player.id(), new GameCatalog.Cost(60, 100, 0, 80, 0, 0, 0))) {
-                    sendText(chatId, "Недостаточно ресурсов.", menuService.mainMenu());
-                    return;
-                }
-                gameDao.addInventoryItem(player.id(), "CRAFTED_CANNON", 1);
-                sendText(chatId, "✅ Скрафчена: 💣 Пушка", menuService.mainMenu());
+                craftItem(chatId, player, "BLUEPRINT_CANNON", "CRAFTED_CANNON", new GameCatalog.Cost(100, 150, 0, 120, 0, 0, 0));
             }
             case "CROSSBOW" -> {
-                if (gameDao.inventoryQuantity(player.id(), "BLUEPRINT_CROSSBOW") <= 0) {
-                    sendText(chatId, "Нужен чертёж усиленного арбалета.", menuService.mainMenu());
-                    return;
-                }
-                if (!gameDao.spendResources(player.id(), new GameCatalog.Cost(80, 0, 0, 40, 0, 0, 0))) {
-                    sendText(chatId, "Недостаточно ресурсов.", menuService.mainMenu());
-                    return;
-                }
-                gameDao.addInventoryItem(player.id(), "CRAFTED_CROSSBOW", 1);
-                sendText(chatId, "✅ Скрафчен: 🏹 Усиленный арбалет", menuService.mainMenu());
+                craftItem(chatId, player, "BLUEPRINT_CROSSBOW", "CRAFTED_CROSSBOW", new GameCatalog.Cost(80, 0, 0, 40, 0, 0, 0));
             }
+            case "CATAPULT" -> craftItem(chatId, player, "BLUEPRINT_CATAPULT", "CRAFTED_CATAPULT", new GameCatalog.Cost(60, 100, 0, 80, 0, 0, 0));
+            case "FLAMETHROWER" -> craftItem(chatId, player, "BLUEPRINT_FLAMETHROWER", "CRAFTED_FLAMETHROWER", new GameCatalog.Cost(0, 0, 0, 200, 100, 50, 0));
+            case "MITHRIL" -> craftItem(chatId, player, "BLUEPRINT_MITHRIL_ARMOR", "MITHRIL_ARMOR", new GameCatalog.Cost(0, 0, 0, 300, 200, 100, 0));
             default -> showCraftMenu(chatId, player);
         }
     }
 
     private void maybeDropBlueprint(PlayerRecord player) {
-        if (ThreadLocalRandom.current().nextDouble() >= 0.01) {
+        double roll = ThreadLocalRandom.current().nextDouble();
+        String found;
+        String rarity;
+        if (roll < 0.003) {
+            rarity = "LEGENDARY";
+            String[] pool = {"BLUEPRINT_CANNON", "BLUEPRINT_FLAMETHROWER", "BLUEPRINT_MITHRIL_ARMOR"};
+            found = pool[ThreadLocalRandom.current().nextInt(pool.length)];
+        } else if (roll < 0.013) {
+            rarity = "RARE";
+            String[] pool = {"BLUEPRINT_PISTOL", "BLUEPRINT_CROSSBOW", "BLUEPRINT_CATAPULT"};
+            found = pool[ThreadLocalRandom.current().nextInt(pool.length)];
+        } else if (roll < 0.043) {
+            rarity = "COMMON";
+            String[] pool = {"BLUEPRINT_WOODEN_SHIELD", "BLUEPRINT_SIMPLE_BOW", "BLUEPRINT_LEATHER_VEST"};
+            found = pool[ThreadLocalRandom.current().nextInt(pool.length)];
+        } else {
             return;
         }
-        String[] blueprints = {"BLUEPRINT_PISTOL", "BLUEPRINT_CANNON", "BLUEPRINT_CROSSBOW"};
-        String found = blueprints[ThreadLocalRandom.current().nextInt(blueprints.length)];
         gameDao.appendDailyLog("RARE", player.villageName() + " нашёл " + catalog.itemDisplay(found));
         pendingLootByPlayer.put(player.id(), found);
-        sendText(player.telegramId(),
-                "📜 Ты нашёл чертёж: " + catalog.itemDisplay(found) + "!\n[ 🔨 Сохранить для крафта ] [ 💰 Продать ] [ 🔨 Аукцион ]",
+        String text = switch (rarity) {
+            case "LEGENDARY" -> "📕🔥 ЛЕГЕНДАРНЫЙ чертёж: " + catalog.itemDisplay(found) + "!!";
+            case "RARE" -> "📘✨ РЕДКИЙ чертёж: " + catalog.itemDisplay(found) + "!";
+            default -> "📜 Найден чертёж: " + catalog.itemDisplay(found);
+        };
+        sendText(player.telegramId(), text + "\n[ 🔨 Сохранить для крафта ] [ 💰 Продать ] [ 🔨 Аукцион ]",
                 InlineKeyboardMarkup.builder()
                         .keyboardRow(List.of(btn("🔨 Сохранить для крафта", "loot:save:" + found), btn("💰 Продать", "loot:sell:" + found)))
                         .keyboardRow(List.of(btn("🔨 Аукцион", "loot:auction:" + found)))
                         .build());
+        if ("LEGENDARY".equals(rarity)) {
+            sendGroupMessageAsync("📕🔥 " + player.villageName() + " нашёл легендарный чертёж: " + catalog.itemDisplay(found) + "!!");
+        }
     }
 
     private void maybeDropArmor(PlayerRecord player) {
@@ -1932,6 +2150,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         if (gameDao.inventoryQuantity(attacker.id(), "CRAFTED_PISTOL") > 0) rows.add(List.of(btn("🔫 Пистолет +15% урон", "attack:raiditem:" + defender.id() + ":PISTOL")));
         if (gameDao.inventoryQuantity(attacker.id(), "CRAFTED_CANNON") > 0) rows.add(List.of(btn("💣 Пушка +20% защита", "attack:raiditem:" + defender.id() + ":CANNON")));
         if (gameDao.inventoryQuantity(attacker.id(), "CRAFTED_CROSSBOW") > 0) rows.add(List.of(btn("🏹 Арбалет +10% шанс", "attack:raiditem:" + defender.id() + ":CROSSBOW")));
+        if (gameDao.inventoryQuantity(attacker.id(), "CRAFTED_FLAMETHROWER") > 0) rows.add(List.of(btn("🔥 Огнемёт +30% урон", "attack:raiditem:" + defender.id() + ":FLAMETHROWER")));
         if (attacker.equippedArmor() != null) rows.add(List.of(btn(catalog.itemDisplay(attacker.equippedArmor()) + " +" + (int) (armorBonus(attacker.equippedArmor()) * 100) + "% защита", "attack:raiditem:" + defender.id() + ":NONE")));
         rows.add(List.of(btn("❌ Без предмета", "attack:raiditem:" + defender.id() + ":NONE")));
         sendText(chatId, text.toString(), InlineKeyboardMarkup.builder().keyboard(rows).build());
@@ -1944,7 +2163,16 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         if ("PISTOL".equals(raidItem)) attEff *= 1.15;
         if ("CANNON".equals(raidItem)) attEff *= 1.20;
         if ("CROSSBOW".equals(raidItem)) attEff *= 1.10;
+        if ("FLAMETHROWER".equals(raidItem)) attEff *= 1.30;
         double chance = (attEff / (attEff + defEff)) * 100.0;
+        int aMorale = gameDao.loadMorale(attacker.id());
+        int dMorale = gameDao.loadMorale(defender.id());
+        if (aMorale >= 80) {
+            chance += 5.0;
+        }
+        if (dMorale >= 80) {
+            chance -= 5.0;
+        }
         return Math.max(3.0, Math.min(97.0, chance));
     }
 
@@ -1953,6 +2181,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             case "PISTOL" -> gameDao.removeInventoryItem(playerId, "CRAFTED_PISTOL", 1);
             case "CANNON" -> gameDao.removeInventoryItem(playerId, "CRAFTED_CANNON", 1);
             case "CROSSBOW" -> gameDao.removeInventoryItem(playerId, "CRAFTED_CROSSBOW", 1);
+            case "FLAMETHROWER" -> gameDao.removeInventoryItem(playerId, "CRAFTED_FLAMETHROWER", 1);
             default -> {
             }
         }
@@ -1963,6 +2192,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             case "PISTOL" -> "Пистолет";
             case "CANNON" -> "Пушка";
             case "CROSSBOW" -> "Усиленный арбалет";
+            case "FLAMETHROWER" -> "Огнемёт";
             default -> "Без предмета";
         };
     }
@@ -2241,6 +2471,88 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         sendText(chatId, "Торговля активна, детали в следующем шаге.", menuService.mainMenu());
     }
 
+    private void touchPlayerActivity(long telegramId) {
+        gameDao.findPlayerByTelegramId(telegramId).ifPresent(p -> gameDao.touchActivity(p.id()));
+    }
+
+    private boolean hasEnough(ResourcesRecord r, GameCatalog.Cost c) {
+        return r.wood() >= c.wood()
+                && r.stone() >= c.stone()
+                && r.food() >= c.food()
+                && r.iron() >= c.iron()
+                && r.gold() >= c.gold()
+                && r.mana() >= c.mana()
+                && r.alcohol() >= c.alcohol();
+    }
+
+    private String playerResourcesLine(ResourcesRecord r, GameCatalog.Cost c) {
+        List<String> parts = new ArrayList<>();
+        if (c.wood() > 0) parts.add("🪵" + r.wood() + " " + (r.wood() >= c.wood() ? "✅" : "❌"));
+        if (c.stone() > 0) parts.add("🪨" + r.stone() + " " + (r.stone() >= c.stone() ? "✅" : "❌"));
+        if (c.food() > 0) parts.add("🌾" + r.food() + " " + (r.food() >= c.food() ? "✅" : "❌"));
+        if (c.iron() > 0) parts.add("⚔️" + r.iron() + " " + (r.iron() >= c.iron() ? "✅" : "❌"));
+        if (c.gold() > 0) parts.add("💰" + r.gold() + " " + (r.gold() >= c.gold() ? "✅" : "❌"));
+        if (c.mana() > 0) parts.add("🧪" + r.mana() + " " + (r.mana() >= c.mana() ? "✅" : "❌"));
+        if (c.alcohol() > 0) parts.add("🍺" + r.alcohol() + " " + (r.alcohol() >= c.alcohol() ? "✅" : "❌"));
+        return "У тебя: " + String.join(" ", parts);
+    }
+
+    private String missingResourcesLine(ResourcesRecord r, GameCatalog.Cost c) {
+        List<String> parts = new ArrayList<>();
+        if (r.wood() < c.wood()) parts.add("🪵" + (c.wood() - r.wood()) + " дерева");
+        if (r.stone() < c.stone()) parts.add("🪨" + (c.stone() - r.stone()) + " камня");
+        if (r.food() < c.food()) parts.add("🌾" + (c.food() - r.food()) + " еды");
+        if (r.iron() < c.iron()) parts.add("⚔️" + (c.iron() - r.iron()) + " железа");
+        if (r.gold() < c.gold()) parts.add("💰" + (c.gold() - r.gold()) + " золота");
+        if (r.mana() < c.mana()) parts.add("🧪" + (c.mana() - r.mana()) + " манны");
+        if (r.alcohol() < c.alcohol()) parts.add("🍺" + (c.alcohol() - r.alcohol()) + " алкоголя");
+        return String.join(", ", parts);
+    }
+
+    private String moraleRestrictionText(int morale) {
+        if (morale < 20) {
+            return "😫 В деревне бунт! Срочно подними мораль!";
+        }
+        return "😔 Твои люди в упадке духа. Подними мораль чтобы строить!";
+    }
+
+    private String moraleLine(int morale) {
+        int filled = Math.max(0, Math.min(10, morale / 10));
+        String bar = "█".repeat(filled) + "░".repeat(10 - filled);
+        String mood = morale >= 80 ? "😄 Высокий боевой дух" : morale >= 50 ? "😐 Нормально" : morale >= 20 ? "😔 Упадок духа" : "😫 Бунт";
+        return mood + "\n😄 Мораль: " + morale + "/100 " + bar;
+    }
+
+    private long nextPassiveTickEpoch(long now) {
+        long block = 10L * 60L * 1000L;
+        return ((now / block) + 1L) * block;
+    }
+
+    private String recipeLine(long playerId, String blueprint, String crafted, GameCatalog.Cost cost) {
+        int qty = gameDao.inventoryQuantity(playerId, blueprint);
+        return catalog.itemDisplay(crafted) + " | " + catalog.itemDisplay(blueprint) + " x" + qty +
+                (qty > 0 ? "" : " 🔒") + " | " + costText(cost);
+    }
+
+    private void addCraftButtonIfAvailable(List<List<InlineKeyboardButton>> rows, long playerId, String blueprint, String title, String action, GameCatalog.Cost cost) {
+        if (gameDao.inventoryQuantity(playerId, blueprint) > 0 && hasEnough(gameDao.loadResources(playerId), cost)) {
+            rows.add(List.of(btn(title, "craft:make:" + action)));
+        }
+    }
+
+    private void craftItem(long chatId, PlayerRecord player, String blueprint, String crafted, GameCatalog.Cost cost) {
+        if (gameDao.inventoryQuantity(player.id(), blueprint) <= 0) {
+            sendText(chatId, "Нужен чертёж: " + catalog.itemDisplay(blueprint), menuService.mainMenu());
+            return;
+        }
+        if (!gameDao.spendResources(player.id(), cost)) {
+            sendText(chatId, "Недостаточно ресурсов.", menuService.mainMenu());
+            return;
+        }
+        gameDao.addInventoryItem(player.id(), crafted, 1);
+        sendText(chatId, "✅ Скрафчено: " + catalog.itemDisplay(crafted), menuService.mainMenu());
+    }
+
     private String actionLabel(String action) {
         return switch (action) {
             case "ATTACK" -> "⚔️ Атака";
@@ -2263,13 +2575,20 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private int sellPrice(String item) {
         return switch (item) {
-            case "BLUEPRINT_PISTOL", "BLUEPRINT_CANNON", "BLUEPRINT_CROSSBOW" -> 120;
+            case "BLUEPRINT_WOODEN_SHIELD", "BLUEPRINT_SIMPLE_BOW", "BLUEPRINT_LEATHER_VEST" -> 80;
+            case "BLUEPRINT_PISTOL", "BLUEPRINT_CROSSBOW", "BLUEPRINT_CATAPULT" -> 160;
+            case "BLUEPRINT_CANNON", "BLUEPRINT_FLAMETHROWER", "BLUEPRINT_MITHRIL_ARMOR" -> 320;
+            case "CRAFTED_WOODEN_SHIELD", "CRAFTED_SIMPLE_BOW" -> 120;
+            case "LEATHER_VEST_ARMOR" -> 100;
             case "LEATHER_ARMOR" -> 80;
             case "CHAINMAIL_ARMOR" -> 140;
             case "IRON_ARMOR" -> 220;
             case "GOLD_ARMOR" -> 500;
             case "DIAMOND_ARMOR" -> 800;
             case "NETHERITE_ARMOR" -> 1500;
+            case "MITHRIL_ARMOR" -> 1300;
+            case "CRAFTED_PISTOL", "CRAFTED_CROSSBOW" -> 250;
+            case "CRAFTED_CANNON", "CRAFTED_FLAMETHROWER", "CRAFTED_CATAPULT" -> 500;
             default -> 100;
         };
     }
