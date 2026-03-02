@@ -1,0 +1,8 @@
+.git
+.idea
+target
+out
+data
+*.db
+*.sqlite3
+.env
