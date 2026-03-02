@@ -3,6 +3,9 @@
 target
 out
 data
+.mvn/wrapper
 *.db
 *.sqlite3
 .env
+.env.*
+README.md
