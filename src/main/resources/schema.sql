@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS buildings (
 CREATE TABLE IF NOT EXISTS army (
     player_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     unit_type TEXT NOT NULL,
+    unit_power INTEGER NOT NULL DEFAULT 0 CHECK (unit_power >= 0),
     quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
     PRIMARY KEY (player_id, unit_type)
 );

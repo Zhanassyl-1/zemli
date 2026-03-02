@@ -17,7 +17,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,10 +42,42 @@ public class GameDao {
     public GameDao(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
         migrateAllianceSchemaIfNeeded();
+        migrateArmyPowerSchemaIfNeeded();
     }
 
     private void migrateAllianceSchemaIfNeeded() {
         // No-op for PostgreSQL setup; schema is managed by schema.sql.
+    }
+
+    private void migrateArmyPowerSchemaIfNeeded() {
+        jdbcTemplate.execute("ALTER TABLE army ADD COLUMN IF NOT EXISTS unit_power INTEGER NOT NULL DEFAULT 0");
+        jdbcTemplate.execute(
+                """
+                UPDATE army
+                SET unit_power = CASE unit_type
+                    WHEN 'SWORDSMAN' THEN 5
+                    WHEN 'CROSSBOWMAN' THEN 12
+                    WHEN 'PALADIN' THEN 25
+                    WHEN 'ASHIGARU' THEN 5
+                    WHEN 'SAM_ARCHER' THEN 12
+                    WHEN 'SAMURAI' THEN 25
+                    WHEN 'BERSERK' THEN 6
+                    WHEN 'VIK_ARCHER' THEN 13
+                    WHEN 'JARL' THEN 28
+                    WHEN 'MONGOL_ARCHER' THEN 5
+                    WHEN 'RIDER' THEN 15
+                    WHEN 'KHAN' THEN 30
+                    WHEN 'SPEARMAN' THEN 5
+                    WHEN 'DES_ARCHER' THEN 11
+                    WHEN 'MAMLUK' THEN 24
+                    WHEN 'WARRIOR' THEN 5
+                    WHEN 'JAGUAR' THEN 14
+                    WHEN 'PRIEST' THEN 27
+                    ELSE unit_power
+                END
+                WHERE unit_power = 0
+                """
+        );
     }
 
     public Optional<PlayerRecord> findPlayerByTelegramId(long telegramId) {
@@ -190,15 +221,12 @@ public class GameDao {
     }
 
     public int calculateTotalArmyPower(long playerId, GameCatalog catalog) {
-        List<KeyValueAmount> units = loadArmy(playerId);
-        int power = 0;
-        for (KeyValueAmount unit : units) {
-            Integer unitPower = catalog.unitPowerByKey(unit.type());
-            if (unitPower != null) {
-                power += unit.quantity() * unitPower;
-            }
-        }
-        return power;
+        Integer power = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(quantity * unit_power), 0) FROM army WHERE player_id = ?",
+                Integer.class,
+                playerId
+        );
+        return power == null ? 0 : power;
     }
 
     public int rankByCityLevel(long playerId) {
@@ -241,19 +269,27 @@ public class GameDao {
     }
 
     public List<PlayerRecord> topPlayersByCityLevel(int limit) {
-        List<PlayerRecord> result = jdbcTemplate.query(
+        return getTopPlayers(limit);
+    }
+
+    public List<PlayerRecord> getTopPlayers(int limit) {
+        return jdbcTemplate.query(
                 """
                 SELECT id, telegram_id, village_name, faction, city_level,
                        builders_count, has_cannon, has_armor, has_crossbow, equipped_armor, created_at
                 FROM players
-                ORDER BY city_level DESC, created_at ASC
+                ORDER BY (
+                    SELECT COALESCE(SUM(a.quantity * a.unit_power), 0)
+                    FROM army a
+                    WHERE a.player_id = players.id
+                ) DESC,
+                city_level DESC,
+                created_at ASC
                 LIMIT ?
                 """,
                 playerMapper(),
                 limit
         );
-        result.sort(Comparator.comparingInt(PlayerRecord::cityLevel).reversed());
-        return result;
     }
 
     public List<String> loadDailyEventDescriptions(Instant since) {
@@ -346,15 +382,15 @@ public class GameDao {
         );
     }
 
-    public void upsertArmy(String unitType, long playerId, int qty) {
+    public void upsertArmy(String unitType, int unitPower, long playerId, int qty) {
         int updated = jdbcTemplate.update(
-                "UPDATE army SET quantity = quantity + ? WHERE player_id = ? AND unit_type = ?",
-                qty, playerId, unitType
+                "UPDATE army SET quantity = quantity + ?, unit_power = ? WHERE player_id = ? AND unit_type = ?",
+                qty, unitPower, playerId, unitType
         );
         if (updated == 0) {
             jdbcTemplate.update(
-                    "INSERT INTO army(player_id, unit_type, quantity) VALUES (?, ?, ?)",
-                    playerId, unitType, qty
+                    "INSERT INTO army(player_id, unit_type, quantity, unit_power) VALUES (?, ?, ?, ?)",
+                    playerId, unitType, qty, unitPower
             );
         }
     }
@@ -1444,6 +1480,10 @@ public class GameDao {
 
     public void setBuildersCount(long playerId, int buildersCount) {
         jdbcTemplate.update("UPDATE players SET builders_count = ? WHERE id = ?", buildersCount, playerId);
+    }
+
+    public void setCityLevel(long playerId, int cityLevel) {
+        jdbcTemplate.update("UPDATE players SET city_level = ? WHERE id = ?", cityLevel, playerId);
     }
 
     public void resetPlayerProgress(long playerId) {
