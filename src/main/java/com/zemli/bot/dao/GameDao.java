@@ -599,6 +599,7 @@ public class GameDao {
                 VALUES (?, ?, ?, 1, ?, NULL, NULL)
                 RETURNING id
                 """,
+                Long.class,
                 sellerId, itemType, startPrice, endsAt
         );
         if (id == null) {
@@ -614,6 +615,7 @@ public class GameDao {
                 VALUES (?, ?, ?, 0, NULL, ?, NULL)
                 RETURNING id
                 """,
+                Long.class,
                 sellerId, itemType, price, buyerId
         );
         if (id == null) {
@@ -956,6 +958,7 @@ public class GameDao {
     public Optional<AllianceInfo> createAlliance(String name, long leaderId) {
         Long id = jdbcTemplate.queryForObject(
                 "INSERT INTO alliances(name, leader_id, created_at) VALUES (?, ?, ?) RETURNING id",
+                Long.class,
                 name, leaderId, Instant.now().toEpochMilli()
         );
         if (id == null) {
@@ -1050,6 +1053,7 @@ public class GameDao {
     public long createAllianceInvite(long allianceId, long inviterId, long invitedPlayerId) {
         Long id = jdbcTemplate.queryForObject(
                 "INSERT INTO alliance_invites(alliance_id, inviter_id, invited_player_id, created_at) VALUES (?, ?, ?, ?) RETURNING id",
+                Long.class,
                 allianceId, inviterId, invitedPlayerId, Instant.now().toEpochMilli()
         );
         return id == null ? 0L : id;
@@ -1319,6 +1323,7 @@ public class GameDao {
                 VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, NULL, ?, ?, NULL, '')
                 RETURNING id
                 """,
+                Long.class,
                 attackerId, defenderId, attackerHp, defenderHp, attackerHp, defenderHp, maxRounds, status, Instant.now().toEpochMilli()
         );
         if (id == null) {
