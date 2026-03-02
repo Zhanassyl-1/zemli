@@ -72,6 +72,28 @@ public class GameScheduler {
         }
     }
 
+    @Scheduled(cron = "0 */5 * * * *", zone = "${game.time-zone:UTC}")
+    public void expireTradeOffers() {
+        int expired = gameDao.expireTradeOffersAndRefund();
+        if (expired > 0) {
+            log.info("Expired trade offers refunded={}", expired);
+        }
+    }
+
+    @Scheduled(cron = "0 0 */2 * * *", zone = "${game.time-zone:UTC}")
+    public void spawnTravelingMerchant() {
+        long until = System.currentTimeMillis() + 30L * 60L * 1000L;
+        gameDao.setServerState("TRAVEL_MERCHANT_UNTIL", String.valueOf(until));
+        bot.sendGroupMessageAsync(
+                "🧙 СТРАНСТВУЮЩИЙ ТОРГОВЕЦ появился в землях!\n" +
+                        "Предлагает (только 30 минут):\n" +
+                        "🪵1000 за 💰50\n" +
+                        "⚔️200 за 💰80\n" +
+                        "🧪50 за 💰200\n" +
+                        "[ 🛒 Купить у торговца → @" + bot.getBotUsername() + " ]"
+        );
+    }
+
     @Scheduled(cron = "*/5 * * * * *", zone = "${game.time-zone:UTC}")
     public void battleTicks() {
         bot.processBattleTicks();

@@ -30,6 +30,7 @@ public class GameCatalog {
         buildings.put("STABLE", new BuildingSpec("STABLE", "Конюшня", "🐎", 1, new Cost(200, 150, 0, 30, 0, 0, 0), 5));
         buildings.put("FARM", new BuildingSpec("FARM", "Ферма", "🌾", 1, new Cost(60, 40, 0, 0, 0, 0, 0), 1));
         buildings.put("MINE", new BuildingSpec("MINE", "Шахта", "⛏️", 1, new Cost(70, 50, 0, 0, 0, 0, 0), 2));
+        buildings.put("LUMBERMILL", new BuildingSpec("LUMBERMILL", "Лесопилка", "🪵", 1, new Cost(90, 60, 0, 0, 0, 0, 0), 2));
         buildings.put("TAVERN", new BuildingSpec("TAVERN", "Таверна", "🍺", 1, new Cost(100, 80, 0, 0, 20, 0, 0), 2));
         buildings.put("MARKET", new BuildingSpec("MARKET", "Рынок", "🏦", 2, new Cost(150, 120, 0, 0, 50, 0, 0), 4));
         buildings.put("PORT", new BuildingSpec("PORT", "Порт", "⚓", 3, new Cost(200, 150, 0, 50, 0, 0, 0), 6));
@@ -56,6 +57,10 @@ public class GameCatalog {
                 3, new Cost(600, 500, 0, 200, 150, 0, 0)
         ));
         putUpgradeCosts("MINE", Map.of(
+                2, new Cost(200, 150, 0, 50, 0, 0, 0),
+                3, new Cost(500, 400, 0, 150, 0, 0, 0)
+        ));
+        putUpgradeCosts("LUMBERMILL", Map.of(
                 2, new Cost(200, 150, 0, 50, 0, 0, 0),
                 3, new Cost(500, 400, 0, 150, 0, 0, 0)
         ));

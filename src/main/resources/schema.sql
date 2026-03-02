@@ -97,6 +97,19 @@ CREATE TABLE IF NOT EXISTS market_listings (
     FOREIGN KEY (highest_bidder_id) REFERENCES players(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS trade_offers (
+    id BIGSERIAL PRIMARY KEY,
+    seller_id BIGINT NOT NULL,
+    give_resource TEXT NOT NULL,
+    give_amount INTEGER NOT NULL,
+    want_resource TEXT NOT NULL,
+    want_amount INTEGER NOT NULL,
+    created_at BIGINT NOT NULL,
+    expires_at BIGINT NOT NULL,
+    status TEXT NOT NULL,
+    FOREIGN KEY (seller_id) REFERENCES players(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS battle_log (
     id BIGSERIAL PRIMARY KEY,
     attacker_id BIGINT NOT NULL,
@@ -167,3 +180,4 @@ CREATE INDEX IF NOT EXISTS idx_player_state_key ON player_state(state_key);
 CREATE INDEX IF NOT EXISTS idx_battles_status ON battles(status);
 CREATE INDEX IF NOT EXISTS idx_alliance_members_alliance ON alliance_members(alliance_id);
 CREATE INDEX IF NOT EXISTS idx_alliance_invites_player ON alliance_invites(invited_player_id);
+CREATE INDEX IF NOT EXISTS idx_trade_offers_status_expires ON trade_offers(status, expires_at);

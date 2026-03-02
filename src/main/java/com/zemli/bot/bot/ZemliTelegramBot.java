@@ -58,6 +58,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             "MITHRIL_ARMOR", 0.45,
             "NETHERITE_ARMOR", 0.50
     );
+    private static final List<String> RESOURCES = List.of("WOOD", "STONE", "FOOD", "IRON", "GOLD", "MANA", "ALCOHOL");
 
     private final String configuredToken;
     private final String botUsername;
@@ -112,6 +113,23 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             this.targetId = targetId;
             this.deadlineAt = deadlineAt;
         }
+    }
+
+    private record NpcTarget(
+            String key,
+            String title,
+            double baseChance,
+            int goldMin,
+            int goldMax,
+            int woodMin,
+            int woodMax,
+            int ironMin,
+            int ironMax,
+            int manaMin,
+            int manaMax,
+            int lossMin,
+            int lossMax
+    ) {
     }
 
     @Override
@@ -1026,23 +1044,34 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         Map<String, BuildingState> bmap = gameDao.loadBuildingMap(player.id());
         int mineLvl = bmap.getOrDefault("MINE", new BuildingState("MINE", 0)).level();
         int farmLvl = bmap.getOrDefault("FARM", new BuildingState("FARM", 0)).level();
+        int lumberLvl = bmap.getOrDefault("LUMBERMILL", new BuildingState("LUMBERMILL", 0)).level();
+        int marketLvl = bmap.getOrDefault("MARKET", new BuildingState("MARKET", 0)).level();
         boolean mineActive = gameDao.isPassiveBuildingActive(player.id(), "MINE");
         boolean farmActive = gameDao.isPassiveBuildingActive(player.id(), "FARM");
+        boolean lumberActive = gameDao.isPassiveBuildingActive(player.id(), "LUMBERMILL");
         long now = Instant.now().toEpochMilli();
         long nextTickMs = nextPassiveTickEpoch(now);
 
         int stoneTick = (int) Math.floor(3 + passiveBonusByLevel(mineLvl, 3));
         int ironTick = (int) Math.floor(passiveBonusByLevel(mineLvl, 2));
         int foodTick = (int) Math.floor(4 + passiveBonusByLevel(farmLvl, 3));
+        int woodTick = 5 + (lumberActive ? (int) Math.floor(passiveBonusByLevel(lumberLvl, 3)) : 0);
 
         StringBuilder text = new StringBuilder();
+        text.append("Что добываешь?\n");
+        text.append("[ 🪵 Ресурсы ] [ 💰 Золото ]\n\n");
+        text.append("💰 Золото за добычу: 30-80");
+        if (marketLvl >= 2) {
+            text.append(" (+50% от рынка ур.2+)");
+        }
+        text.append("\n\n");
+
         text.append("⛏️ Шахта ур.").append(mineLvl).append("\n");
         text.append("Статус: ").append(mineActive ? "✅ Активна" : "❌ Не активна").append("\n");
         if (mineActive) {
             text.append("Добывает каждые 10 мин:\n");
             text.append("⚔️ Железо: +").append(ironTick).append("\n");
             text.append("🪨 Камень: +").append(stoneTick).append("\n");
-            text.append("Следующая добыча через: ").append(harvestCooldownText(Math.max(0L, nextTickMs - now)).replace("⏳ Следующая добыча через: ", "")).append("\n");
         }
 
         text.append("\n🌾 Ферма ур.").append(farmLvl).append("\n");
@@ -1051,6 +1080,13 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             text.append("Добывает каждые 10 мин:\n");
             text.append("🌾 Еда: +").append(foodTick).append("\n");
         }
+        text.append("\n🪵 Лесопилка ур.").append(lumberLvl).append("\n");
+        text.append("Статус: ").append(lumberActive ? "✅ Активна" : "❌ Не активна").append("\n");
+        if (lumberActive) {
+            text.append("Добывает каждые 10 мин:\n");
+            text.append("🪵 Дерево: +").append(woodTick).append("\n");
+        }
+        text.append("Следующая добыча через: ").append(harvestCooldownText(Math.max(0L, nextTickMs - now)).replace("⏳ Следующая добыча через: ", "")).append("\n");
 
         Long cd = gameDao.getPlayerState(player.id(), "MINE_COOLDOWN_UNTIL");
         if (cd != null && cd > now) {
@@ -1060,7 +1096,8 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         sendText(chatId, text.toString(), InlineKeyboardMarkup.builder()
                 .keyboardRow(List.of(btn(mineActive ? "⚙️ Деактивировать шахту" : "✅ Активировать шахту", "mine:toggle:MINE")))
                 .keyboardRow(List.of(btn(farmActive ? "⚙️ Деактивировать ферму" : "✅ Активировать ферму", "mine:toggle:FARM")))
-                .keyboardRow(List.of(btn("⛏️ Активная добыча", "mine:collect")))
+                .keyboardRow(List.of(btn(lumberActive ? "⚙️ Деактивировать лесопилку" : "✅ Активировать лесопилку", "mine:toggle:LUMBERMILL")))
+                .keyboardRow(List.of(btn("🪵 Ресурсы", "mine:collect:RESOURCES"), btn("💰 Золото", "mine:collect:GOLD")))
                 .keyboardRow(List.of(btn("◀️ Назад", "menu:city")))
                 .build());
     }
@@ -1073,7 +1110,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             showMineMenu(chatId, player);
             return;
         }
-        if (!"mine:collect".equals(data)) {
+        if (!data.startsWith("mine:collect")) {
             showMineMenu(chatId, player);
             return;
         }
@@ -1084,29 +1121,48 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
 
-        Map<String, BuildingState> bmap = gameDao.loadBuildingMap(player.id());
-        int mineLvl = bmap.getOrDefault("MINE", new BuildingState("MINE", 0)).level();
-        int farmLvl = bmap.getOrDefault("FARM", new BuildingState("FARM", 0)).level();
-        DailyEventType event = activeDailyEvent();
-
-        int passiveWood = 5;
-        int passiveStone = 3 + (int) Math.floor(passiveBonusByLevel(mineLvl, 3));
-        int passiveFood = 4 + (int) Math.floor(passiveBonusByLevel(farmLvl, 3));
-        int passiveIron = (int) Math.floor(passiveBonusByLevel(mineLvl, 2));
-        double eventMul = 1.0;
-        if (event == DailyEventType.HARVEST_DAY) {
-            eventMul = 1.2;
+        String mode = "RESOURCES";
+        String[] parts = data.split(":");
+        if (parts.length >= 3) {
+            mode = parts[2];
         }
-        int wood = (int) Math.floor(passiveWood * 5 * eventMul);
-        int stone = (int) Math.floor(passiveStone * 5 * eventMul);
-        int food = (int) Math.floor(passiveFood * 5 * eventMul);
-        int iron = (int) Math.floor(passiveIron * 5 * eventMul);
 
-        gameDao.addResources(player.id(), new GameCatalog.Cost(wood, stone, food, iron, 0, 0, 0));
+        Map<String, BuildingState> bmap = gameDao.loadBuildingMap(player.id());
+        int marketLvl = bmap.getOrDefault("MARKET", new BuildingState("MARKET", 0)).level();
+        String msg;
+        if ("GOLD".equals(mode)) {
+            int gold = rand(30, 80);
+            if (marketLvl >= 2) {
+                gold = (int) Math.floor(gold * 1.5);
+            }
+            gameDao.addResources(player.id(), new GameCatalog.Cost(0, 0, 0, 0, gold, 0, 0));
+            msg = "✅ Добыто золото:\n💰 +" + gold;
+        } else {
+            int mineLvl = bmap.getOrDefault("MINE", new BuildingState("MINE", 0)).level();
+            int farmLvl = bmap.getOrDefault("FARM", new BuildingState("FARM", 0)).level();
+            int lumberLvl = bmap.getOrDefault("LUMBERMILL", new BuildingState("LUMBERMILL", 0)).level();
+            boolean lumberActive = gameDao.isPassiveBuildingActive(player.id(), "LUMBERMILL");
+            DailyEventType event = activeDailyEvent();
+
+            int passiveWood = 5 + (lumberActive ? (int) Math.floor(passiveBonusByLevel(lumberLvl, 3)) : 0);
+            int passiveStone = 3 + (int) Math.floor(passiveBonusByLevel(mineLvl, 3));
+            int passiveFood = 4 + (int) Math.floor(passiveBonusByLevel(farmLvl, 3));
+            int passiveIron = (int) Math.floor(passiveBonusByLevel(mineLvl, 2));
+            double eventMul = 1.0;
+            if (event == DailyEventType.HARVEST_DAY) {
+                eventMul = 1.2;
+            }
+            int wood = (int) Math.floor(passiveWood * 5 * eventMul);
+            int stone = (int) Math.floor(passiveStone * 5 * eventMul);
+            int food = (int) Math.floor(passiveFood * 5 * eventMul);
+            int iron = (int) Math.floor(passiveIron * 5 * eventMul);
+
+            gameDao.addResources(player.id(), new GameCatalog.Cost(wood, stone, food, iron, 0, 0, 0));
+            msg = "✅ Добыто:\n🪵 +" + wood + "\n🪨 +" + stone + "\n🌾 +" + food + "\n⚔️ +" + iron;
+        }
         gameDao.setPlayerState(player.id(), "MINE_COOLDOWN_UNTIL", Instant.now().plusSeconds(10 * 60L).toEpochMilli());
         gameDao.changeMorale(player.id(), 5);
 
-        String msg = "✅ Добыто:\n🪵 +" + wood + "\n🪨 +" + stone + "\n🌾 +" + food + "\n⚔️ +" + iron;
         maybeDropBlueprint(player);
         maybeDropArmor(player);
         sendText(chatId, msg, menuService.mainMenu());
@@ -1125,11 +1181,21 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             String color = (p < myPower * 0.6) ? "🔴" : (p > myPower * 1.4 ? "🟡" : "🟢");
             rows.add(List.of(btn(color + " " + target.villageName() + " (" + p + ")", "attack:target:" + target.id())));
         }
+        rows.add(List.of(btn("🗺️ Атаковать NPC страну", "attack:npcmenu")));
         rows.add(List.of(btn("◀️ Назад", "menu:city")));
         sendText(chatId, "⚔️ Выбери цель для атаки:", InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
     private void handleAttackCallbacks(long chatId, PlayerRecord attacker, String data) {
+        if ("attack:npcmenu".equals(data)) {
+            showNpcTargets(chatId, attacker);
+            return;
+        }
+        if (data.startsWith("attack:npcgo:")) {
+            String key = data.substring("attack:npcgo:".length());
+            resolveNpcAttack(chatId, attacker, key);
+            return;
+        }
         String[] p = data.split(":");
         if (p.length < 3) {
             showAttackTargets(chatId, attacker);
@@ -2197,6 +2263,118 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         };
     }
 
+    private List<NpcTarget> npcTargets() {
+        return List.of(
+                new NpcTarget("BARBARIANS", "🏕️ Деревня варваров", 90.0, 20, 50, 50, 100, 0, 0, 0, 0, 5, 10),
+                new NpcTarget("NOMADS", "🏘️ Посёлок кочевников", 70.0, 80, 150, 0, 0, 20, 40, 0, 0, 10, 20),
+                new NpcTarget("TRADERS", "🏙️ Город торговцев", 50.0, 300, 500, 0, 0, 50, 80, 0, 0, 20, 30),
+                new NpcTarget("EAST_EMPIRE", "🏯 Империя востока", 30.0, 500, 1000, 0, 0, 200, 260, 50, 50, 30, 50),
+                new NpcTarget("WORLD_POWER", "👑 Мировая держава", 10.0, 2000, 5000, 0, 0, 500, 700, 200, 240, 50, 80)
+        );
+    }
+
+    private void showNpcTargets(long chatId, PlayerRecord attacker) {
+        int power = getPlayerPower(attacker.id());
+        StringBuilder sb = new StringBuilder("🗺️ СОСЕДНИЕ СТРАНЫ\nВыбери кого атаковать:\n━━━━━━━━━━━━\n");
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        for (NpcTarget t : npcTargets()) {
+            double chance = npcChance(t, power);
+            sb.append(t.title()).append("\n")
+                    .append("Шанс победы: ").append(String.format("%.1f", chance)).append("%\n")
+                    .append("Награда: ").append(npcRewardText(t)).append("\n")
+                    .append("Потери армии: ").append(t.lossMin()).append("-").append(t.lossMax()).append("%\n\n");
+            rows.add(List.of(btn("⚔️ " + t.title(), "attack:npcgo:" + t.key())));
+        }
+        sb.append("━━━━━━━━━━━━\n⚠️ Потери армии в любом случае!");
+        rows.add(List.of(btn("◀️ Назад", "menu:attack")));
+        sendText(chatId, sb.toString(), InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private double npcChance(NpcTarget target, int attackerPower) {
+        double bonus = Math.min(20.0, (attackerPower / 1000.0) * 5.0);
+        return Math.max(3.0, Math.min(97.0, target.baseChance() + bonus));
+    }
+
+    private String npcRewardText(NpcTarget target) {
+        List<String> parts = new ArrayList<>();
+        parts.add("💰" + target.goldMin() + "-" + target.goldMax());
+        if (target.woodMax() > 0) {
+            parts.add("🪵" + target.woodMin() + "-" + target.woodMax());
+        }
+        if (target.ironMax() > 0) {
+            parts.add("⚔️" + target.ironMin() + "-" + target.ironMax());
+        }
+        if (target.manaMax() > 0) {
+            parts.add("🧪" + target.manaMin() + "-" + target.manaMax());
+        }
+        if ("WORLD_POWER".equals(target.key())) {
+            parts.add("редкий чертёж");
+        }
+        return String.join(" + ", parts);
+    }
+
+    private void resolveNpcAttack(long chatId, PlayerRecord attacker, String key) {
+        NpcTarget target = npcTargets().stream().filter(t -> t.key().equals(key)).findFirst().orElse(null);
+        if (target == null) {
+            sendText(chatId, "Цель не найдена.", menuService.mainMenu());
+            return;
+        }
+        int power = getPlayerPower(attacker.id());
+        if (power <= 0) {
+            sendText(chatId, "⚠️ У тебя нет армии! Сначала найми воинов.");
+            return;
+        }
+        double chance = npcChance(target, power);
+        boolean won = ThreadLocalRandom.current().nextDouble(0.0, 100.0) < chance;
+        int lossPercent = rand(target.lossMin(), target.lossMax());
+        List<GameDao.ArmyLoss> losses = gameDao.applyArmyLossPercent(attacker.id(), lossPercent);
+
+        int gold = 0;
+        int wood = 0;
+        int iron = 0;
+        int mana = 0;
+        if (won) {
+            gold = rand(target.goldMin(), target.goldMax());
+            if (target.woodMax() > 0) wood = rand(target.woodMin(), target.woodMax());
+            if (target.ironMax() > 0) iron = rand(target.ironMin(), target.ironMax());
+            if (target.manaMax() > 0) mana = rand(target.manaMin(), target.manaMax());
+            gameDao.addResources(attacker.id(), new GameCatalog.Cost(wood, 0, 0, iron, gold, mana, 0));
+            gameDao.changeMorale(attacker.id(), 10);
+            if ("WORLD_POWER".equals(target.key())) {
+                gameDao.addInventoryItem(attacker.id(), "BLUEPRINT_CANNON", 1);
+            }
+        } else {
+            gameDao.changeMorale(attacker.id(), -15);
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("🗺️ Атака на ").append(target.title()).append("\n");
+        sb.append(won ? "✅ Победа!\n" : "❌ Поражение.\n");
+        sb.append("Потери армии: ").append(lossPercent).append("%\n");
+        if (won) {
+            sb.append("Добыча: ").append(costText(new GameCatalog.Cost(wood, 0, 0, iron, gold, mana, 0))).append("\n");
+            if ("WORLD_POWER".equals(target.key())) {
+                sb.append("📘 Получен редкий чертёж!\n");
+            }
+        }
+        if (!losses.isEmpty()) {
+            sb.append("Потери отрядов: ");
+            for (GameDao.ArmyLoss l : losses) {
+                sb.append(l.unitType()).append(" -").append(l.lost()).append(" ");
+            }
+            sb.append("\n");
+        }
+        sendText(chatId, sb.toString(), menuService.mainMenu());
+
+        if (won && ("EAST_EMPIRE".equals(target.key()) || "WORLD_POWER".equals(target.key()))) {
+            sendGroupMessageAsync(
+                    "⚔️ ПОДВИГ!\n" +
+                            attacker.villageName() + " разгромил " + target.title() + "!\n" +
+                            "Добыча: 💰" + gold + " ⚔️" + iron + " 🧪" + mana
+            );
+        }
+    }
+
     private void showAllianceMenu(long chatId, PlayerRecord player) {
         Optional<GameDao.AllianceInfo> alliance = gameDao.findAllianceByPlayerId(player.id());
         if (alliance.isEmpty()) {
@@ -2418,13 +2596,24 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             txt.append(catalog.itemDisplay(item.type())).append(" x").append(item.quantity()).append("\n");
             rows.add(List.of(btn("💰 Продать напрямую", "trade:direct:item:" + item.type()), btn("🔨 Аукцион (50💰)", "trade:auction:item:" + item.type())));
         }
-        rows.add(List.of(btn("📣 Активные аукционы", "trade:auctions")));
+        rows.add(List.of(btn("🔄 Обмен ресурсами", "trade:exchange"), btn("📣 Активные аукционы", "trade:auctions")));
+        if (isMerchantActive()) {
+            rows.add(List.of(btn("🧙 Торговец", "trade:merchant")));
+        }
         rows.add(List.of(btn("◀️ Назад", "menu:city")));
         sendText(chatId, txt.toString(), InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
     private void handleTradeCallbacks(long chatId, PlayerRecord player, String data) {
         String[] p = data.split(":");
+        if (p.length >= 2 && "exchange".equals(p[1])) {
+            handleExchangeCallbacks(chatId, player, p);
+            return;
+        }
+        if (p.length >= 2 && "merchant".equals(p[1])) {
+            handleMerchantCallbacks(chatId, player, p);
+            return;
+        }
         if (p.length >= 2 && "auctions".equals(p[1])) {
             List<com.zemli.bot.model.MarketListing> active = gameDao.findActiveAuctions();
             if (active.isEmpty()) {
@@ -2469,6 +2658,205 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
         sendText(chatId, "Торговля активна, детали в следующем шаге.", menuService.mainMenu());
+    }
+
+    private void handleExchangeCallbacks(long chatId, PlayerRecord player, String[] p) {
+        if (p.length == 2) {
+            showExchangeBoard(chatId, player);
+            return;
+        }
+        if (p.length >= 3 && "new".equals(p[2])) {
+            List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+            for (String r : RESOURCES) {
+                rows.add(List.of(btn("Отдаю " + resourceEmoji(r), "trade:exchange:give_res:" + r)));
+            }
+            rows.add(List.of(btn("◀️ Назад", "trade:exchange")));
+            sendText(chatId, "Выбери ресурс, который отдаёшь:", InlineKeyboardMarkup.builder().keyboard(rows).build());
+            return;
+        }
+        if (p.length >= 4 && "give_res".equals(p[2])) {
+            String res = p[3];
+            if (!RESOURCES.contains(res)) return;
+            gameDao.setPlayerState(player.id(), "TRADE_GIVE_RES_IDX", RESOURCES.indexOf(res));
+            sendAmountSelector(chatId, "Сколько отдаёшь " + resourceEmoji(res) + "?", "trade:exchange:give_amt:");
+            return;
+        }
+        if (p.length >= 4 && "give_amt".equals(p[2])) {
+            int amount = Integer.parseInt(p[3]);
+            gameDao.setPlayerState(player.id(), "TRADE_GIVE_AMOUNT", amount);
+            List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+            for (String r : RESOURCES) {
+                rows.add(List.of(btn("Хочу " + resourceEmoji(r), "trade:exchange:want_res:" + r)));
+            }
+            rows.add(List.of(btn("◀️ Назад", "trade:exchange")));
+            sendText(chatId, "Выбери ресурс, который хочешь получить:", InlineKeyboardMarkup.builder().keyboard(rows).build());
+            return;
+        }
+        if (p.length >= 4 && "want_res".equals(p[2])) {
+            String res = p[3];
+            if (!RESOURCES.contains(res)) return;
+            gameDao.setPlayerState(player.id(), "TRADE_WANT_RES_IDX", RESOURCES.indexOf(res));
+            sendAmountSelector(chatId, "Сколько хочешь получить " + resourceEmoji(res) + "?", "trade:exchange:want_amt:");
+            return;
+        }
+        if (p.length >= 4 && "want_amt".equals(p[2])) {
+            int wantAmount = Integer.parseInt(p[3]);
+            Long giveIdx = gameDao.getPlayerState(player.id(), "TRADE_GIVE_RES_IDX");
+            Long giveAmount = gameDao.getPlayerState(player.id(), "TRADE_GIVE_AMOUNT");
+            Long wantIdx = gameDao.getPlayerState(player.id(), "TRADE_WANT_RES_IDX");
+            if (giveIdx == null || giveAmount == null || wantIdx == null) {
+                sendText(chatId, "Сначала выбери параметры предложения.", menuService.mainMenu());
+                return;
+            }
+            String giveRes = RESOURCES.get(giveIdx.intValue());
+            String wantRes = RESOURCES.get(wantIdx.intValue());
+            if (giveRes.equals(wantRes)) {
+                sendText(chatId, "Ресурсы должны отличаться.", menuService.mainMenu());
+                return;
+            }
+            if (gameDao.countActiveTradeOffers(player.id()) >= 3) {
+                sendText(chatId, "У тебя максимум 3 активных предложения.", menuService.mainMenu());
+                return;
+            }
+            if (!gameDao.spendSingleResource(player.id(), giveRes, giveAmount.intValue())) {
+                sendText(chatId, "Недостаточно ресурсов для создания предложения.", menuService.mainMenu());
+                return;
+            }
+            long expiresAt = Instant.now().plusSeconds(24L * 3600L).toEpochMilli();
+            gameDao.createTradeOffer(player.id(), giveRes, giveAmount.intValue(), wantRes, wantAmount, expiresAt);
+            sendText(chatId,
+                    "✅ Предложение создано:\nОтдаю: " + resourceEmoji(giveRes) + giveAmount + "\nХочу: " + resourceEmoji(wantRes) + wantAmount,
+                    menuService.mainMenu());
+            return;
+        }
+        if (p.length >= 4 && "accept".equals(p[2])) {
+            long offerId = Long.parseLong(p[3]);
+            boolean ok = gameDao.acceptTradeOffer(offerId, player.id());
+            if (!ok) {
+                sendText(chatId, "Сделка не удалась (возможно, не хватает ресурсов или предложение уже закрыто).", menuService.mainMenu());
+                return;
+            }
+            sendText(chatId, "✅ Сделка завершена!", menuService.mainMenu());
+            return;
+        }
+        showExchangeBoard(chatId, player);
+    }
+
+    private void showExchangeBoard(long chatId, PlayerRecord player) {
+        List<GameDao.TradeOffer> offers = gameDao.listActiveTradeOffers(20);
+        StringBuilder sb = new StringBuilder("🔄 БИРЖА РЕСУРСОВ\n━━━━━━━━━━━━\nАктивные предложения:\n");
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        int i = 1;
+        for (GameDao.TradeOffer offer : offers) {
+            if (offer.sellerId() == player.id()) {
+                continue;
+            }
+            sb.append(i).append(". ").append(offer.sellerVillage()).append(": ")
+                    .append(resourceEmoji(offer.giveResource())).append(offer.giveAmount())
+                    .append(" → ")
+                    .append(resourceEmoji(offer.wantResource())).append(offer.wantAmount())
+                    .append("\n");
+            rows.add(List.of(btn("✅ Принять #" + i, "trade:exchange:accept:" + offer.id())));
+            i++;
+        }
+        if (i == 1) {
+            sb.append("Пока нет активных предложений.\n");
+        }
+        sb.append("━━━━━━━━━━━━");
+        rows.add(List.of(btn("+ Создать предложение", "trade:exchange:new")));
+        rows.add(List.of(btn("◀️ Назад", "menu:trade")));
+        sendText(chatId, sb.toString(), InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private void handleMerchantCallbacks(long chatId, PlayerRecord player, String[] p) {
+        if (!isMerchantActive()) {
+            sendText(chatId, "Торговец сейчас недоступен.", menuService.mainMenu());
+            return;
+        }
+        if (p.length == 2) {
+            sendText(chatId,
+                    "🧙 СТРАНСТВУЮЩИЙ ТОРГОВЕЦ\n" +
+                            "Предложения (только 30 минут):\n" +
+                            "🪵1000 за 💰50\n" +
+                            "⚔️200 за 💰80\n" +
+                            "🧪50 за 💰200",
+                    InlineKeyboardMarkup.builder()
+                            .keyboardRow(List.of(btn("Купить 🪵1000 за 💰50", "trade:merchant:buy:WOOD")))
+                            .keyboardRow(List.of(btn("Купить ⚔️200 за 💰80", "trade:merchant:buy:IRON")))
+                            .keyboardRow(List.of(btn("Купить 🧪50 за 💰200", "trade:merchant:buy:MANA")))
+                            .keyboardRow(List.of(btn("◀️ Назад", "menu:trade")))
+                            .build());
+            return;
+        }
+        if (p.length >= 4 && "buy".equals(p[2])) {
+            String type = p[3];
+            int goldCost;
+            String res;
+            int amount;
+            switch (type) {
+                case "WOOD" -> {
+                    goldCost = 50;
+                    res = "WOOD";
+                    amount = 1000;
+                }
+                case "IRON" -> {
+                    goldCost = 80;
+                    res = "IRON";
+                    amount = 200;
+                }
+                case "MANA" -> {
+                    goldCost = 200;
+                    res = "MANA";
+                    amount = 50;
+                }
+                default -> {
+                    sendText(chatId, "Неизвестный товар.", menuService.mainMenu());
+                    return;
+                }
+            }
+            if (!gameDao.spendSingleResource(player.id(), "GOLD", goldCost)) {
+                sendText(chatId, "Недостаточно золота.", menuService.mainMenu());
+                return;
+            }
+            gameDao.addSingleResource(player.id(), res, amount);
+            sendText(chatId, "✅ Покупка успешна: " + resourceEmoji(res) + amount + " за 💰" + goldCost, menuService.mainMenu());
+            return;
+        }
+        sendText(chatId, "Торговец сейчас недоступен.", menuService.mainMenu());
+    }
+
+    private boolean isMerchantActive() {
+        Optional<String> until = gameDao.getServerState("TRAVEL_MERCHANT_UNTIL");
+        if (until.isEmpty()) {
+            return false;
+        }
+        try {
+            return Long.parseLong(until.get()) > System.currentTimeMillis();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private void sendAmountSelector(long chatId, String title, String prefix) {
+        sendText(chatId, title,
+                InlineKeyboardMarkup.builder()
+                        .keyboardRow(List.of(btn("50", prefix + "50"), btn("100", prefix + "100"), btn("300", prefix + "300")))
+                        .keyboardRow(List.of(btn("500", prefix + "500"), btn("1000", prefix + "1000"), btn("2000", prefix + "2000")))
+                        .keyboardRow(List.of(btn("◀️ Назад", "trade:exchange")))
+                        .build());
+    }
+
+    private String resourceEmoji(String resourceKey) {
+        return switch (resourceKey) {
+            case "WOOD" -> "🪵";
+            case "STONE" -> "🪨";
+            case "FOOD" -> "🌾";
+            case "IRON" -> "⚔️";
+            case "GOLD" -> "💰";
+            case "MANA" -> "🧪";
+            case "ALCOHOL" -> "🍺";
+            default -> resourceKey;
+        };
     }
 
     private void touchPlayerActivity(long telegramId) {

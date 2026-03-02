@@ -35,6 +35,7 @@ public class GameDao {
     public record AllianceMemberInfo(long playerId, long telegramId, String villageName, boolean leader, long joinedAt) {}
     public record AllianceInviteInfo(long id, long allianceId, String allianceName, long inviterId, String inviterVillage, long invitedPlayerId, long createdAt) {}
     public record PlayerBattleStats(int wins, int losses) {}
+    public record TradeOffer(long id, long sellerId, String sellerVillage, String giveResource, int giveAmount, String wantResource, int wantAmount, long createdAt, long expiresAt, String status) {}
     public record Build(long playerId, String buildingType, int level) {}
 
     private final JdbcTemplate jdbcTemplate;
@@ -311,6 +312,29 @@ public class GameDao {
         );
     }
 
+    public boolean spendSingleResource(long playerId, String resourceKey, int amount) {
+        if (amount <= 0) {
+            return true;
+        }
+        String column = resourceColumn(resourceKey);
+        int updated = jdbcTemplate.update(
+                "UPDATE resources SET " + column + " = " + column + " - ? WHERE player_id = ? AND " + column + " >= ?",
+                amount, playerId, amount
+        );
+        return updated > 0;
+    }
+
+    public void addSingleResource(long playerId, String resourceKey, int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        String column = resourceColumn(resourceKey);
+        jdbcTemplate.update(
+                "UPDATE resources SET " + column + " = " + column + " + ? WHERE player_id = ?",
+                amount, playerId
+        );
+    }
+
     public void setResourcesExact(long playerId, int wood, int stone, int food, int iron, int gold, int mana, int alcohol) {
         jdbcTemplate.update(
                 """
@@ -511,13 +535,16 @@ public class GameDao {
             Map<String, BuildingState> levels = loadBuildingMap(player.id());
             int mineLvl = levels.getOrDefault("MINE", new BuildingState("MINE", 0)).level();
             int farmLvl = levels.getOrDefault("FARM", new BuildingState("FARM", 0)).level();
+            int lumberLvl = levels.getOrDefault("LUMBERMILL", new BuildingState("LUMBERMILL", 0)).level();
             int tavernLvl = levels.getOrDefault("TAVERN", new BuildingState("TAVERN", 0)).level();
             int morale = loadMorale(player.id());
             boolean mineActive = isPassiveBuildingActive(player.id(), "MINE");
             boolean farmActive = isPassiveBuildingActive(player.id(), "FARM");
+            boolean lumberActive = isPassiveBuildingActive(player.id(), "LUMBERMILL");
 
             double moraleMul = morale < 20 ? 0.70 : 1.0;
-            int woodIncome = (int) Math.floor(5 * multiplier * moraleMul);
+            int woodBase = 5 + (lumberActive ? (int) Math.floor(passiveBonusByLevel(lumberLvl, 3)) : 0);
+            int woodIncome = (int) Math.floor(woodBase * multiplier * moraleMul);
             int stoneIncome = mineActive ? (int) Math.floor((3 + passiveBonusByLevel(mineLvl, 3)) * multiplier * moraleMul) : 0;
             int foodIncome = farmActive ? (int) Math.floor((4 + passiveBonusByLevel(farmLvl, 3)) * multiplier * moraleMul) : 0;
             int ironIncome = mineActive ? (int) Math.floor(passiveBonusByLevel(mineLvl, 2) * multiplier * moraleMul) : 0;
@@ -678,6 +705,140 @@ public class GameDao {
         }
 
         jdbcTemplate.update("DELETE FROM market_listings WHERE id = ?", listing.id());
+    }
+
+    public int countActiveTradeOffers(long sellerId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM trade_offers WHERE seller_id = ? AND status = 'ACTIVE' AND expires_at > ?",
+                Integer.class,
+                sellerId,
+                Instant.now().toEpochMilli()
+        );
+        return count == null ? 0 : count;
+    }
+
+    public List<TradeOffer> listActiveTradeOffers(int limit) {
+        long now = Instant.now().toEpochMilli();
+        return jdbcTemplate.query(
+                """
+                SELECT o.id, o.seller_id, p.village_name AS seller_village, o.give_resource, o.give_amount,
+                       o.want_resource, o.want_amount, o.created_at, o.expires_at, o.status
+                FROM trade_offers o
+                JOIN players p ON p.id = o.seller_id
+                WHERE o.status = 'ACTIVE' AND o.expires_at > ?
+                ORDER BY o.created_at DESC
+                LIMIT ?
+                """,
+                (rs, rowNum) -> new TradeOffer(
+                        rs.getLong("id"),
+                        rs.getLong("seller_id"),
+                        rs.getString("seller_village"),
+                        rs.getString("give_resource"),
+                        rs.getInt("give_amount"),
+                        rs.getString("want_resource"),
+                        rs.getInt("want_amount"),
+                        rs.getLong("created_at"),
+                        rs.getLong("expires_at"),
+                        rs.getString("status")
+                ),
+                now, limit
+        );
+    }
+
+    public Optional<TradeOffer> findTradeOffer(long offerId) {
+        List<TradeOffer> rows = jdbcTemplate.query(
+                """
+                SELECT o.id, o.seller_id, p.village_name AS seller_village, o.give_resource, o.give_amount,
+                       o.want_resource, o.want_amount, o.created_at, o.expires_at, o.status
+                FROM trade_offers o
+                JOIN players p ON p.id = o.seller_id
+                WHERE o.id = ?
+                """,
+                (rs, rowNum) -> new TradeOffer(
+                        rs.getLong("id"),
+                        rs.getLong("seller_id"),
+                        rs.getString("seller_village"),
+                        rs.getString("give_resource"),
+                        rs.getInt("give_amount"),
+                        rs.getString("want_resource"),
+                        rs.getInt("want_amount"),
+                        rs.getLong("created_at"),
+                        rs.getLong("expires_at"),
+                        rs.getString("status")
+                ),
+                offerId
+        );
+        return rows.stream().findFirst();
+    }
+
+    public long createTradeOffer(long sellerId, String giveResource, int giveAmount, String wantResource, int wantAmount, long expiresAt) {
+        Long id = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO trade_offers(seller_id, give_resource, give_amount, want_resource, want_amount, created_at, expires_at, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+                RETURNING id
+                """,
+                Long.class,
+                sellerId, giveResource, giveAmount, wantResource, wantAmount, Instant.now().toEpochMilli(), expiresAt
+        );
+        if (id == null) {
+            throw new IllegalStateException("Failed to create trade offer");
+        }
+        return id;
+    }
+
+    @Transactional
+    public boolean acceptTradeOffer(long offerId, long buyerId) {
+        Optional<TradeOffer> offerOpt = findTradeOffer(offerId);
+        if (offerOpt.isEmpty()) {
+            return false;
+        }
+        TradeOffer offer = offerOpt.get();
+        long now = Instant.now().toEpochMilli();
+        if (!"ACTIVE".equals(offer.status()) || offer.expiresAt() <= now || offer.sellerId() == buyerId) {
+            return false;
+        }
+
+        if (!spendSingleResource(buyerId, offer.wantResource(), offer.wantAmount())) {
+            return false;
+        }
+        addSingleResource(offer.sellerId(), offer.wantResource(), offer.wantAmount());
+        addSingleResource(buyerId, offer.giveResource(), offer.giveAmount());
+        jdbcTemplate.update("UPDATE trade_offers SET status = 'COMPLETED' WHERE id = ? AND status = 'ACTIVE'", offerId);
+        return true;
+    }
+
+    @Transactional
+    public int expireTradeOffersAndRefund() {
+        long now = Instant.now().toEpochMilli();
+        List<TradeOffer> expired = jdbcTemplate.query(
+                """
+                SELECT o.id, o.seller_id, p.village_name AS seller_village, o.give_resource, o.give_amount,
+                       o.want_resource, o.want_amount, o.created_at, o.expires_at, o.status
+                FROM trade_offers o
+                JOIN players p ON p.id = o.seller_id
+                WHERE o.status = 'ACTIVE' AND o.expires_at <= ?
+                """,
+                (rs, rowNum) -> new TradeOffer(
+                        rs.getLong("id"),
+                        rs.getLong("seller_id"),
+                        rs.getString("seller_village"),
+                        rs.getString("give_resource"),
+                        rs.getInt("give_amount"),
+                        rs.getString("want_resource"),
+                        rs.getInt("want_amount"),
+                        rs.getLong("created_at"),
+                        rs.getLong("expires_at"),
+                        rs.getString("status")
+                ),
+                now
+        );
+
+        for (TradeOffer offer : expired) {
+            addSingleResource(offer.sellerId(), offer.giveResource(), offer.giveAmount());
+            jdbcTemplate.update("UPDATE trade_offers SET status = 'EXPIRED' WHERE id = ?", offer.id());
+        }
+        return expired.size();
     }
 
     public List<PlayerRecord> playersForDirectTrade(long sellerId) {
@@ -1490,6 +1651,19 @@ public class GameDao {
     private Integer nullableInteger(ResultSet rs, String column) throws SQLException {
         int value = rs.getInt(column);
         return rs.wasNull() ? null : value;
+    }
+
+    private String resourceColumn(String resourceKey) {
+        return switch (resourceKey) {
+            case "WOOD" -> "wood";
+            case "STONE" -> "stone";
+            case "FOOD" -> "food";
+            case "IRON" -> "iron";
+            case "GOLD" -> "gold";
+            case "MANA" -> "mana";
+            case "ALCOHOL" -> "alcohol";
+            default -> throw new IllegalArgumentException("Unknown resource key: " + resourceKey);
+        };
     }
 
     private String nullableString(ResultSet rs, String column) {
