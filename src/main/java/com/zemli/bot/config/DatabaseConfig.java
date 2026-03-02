@@ -13,7 +13,7 @@ public class DatabaseConfig {
     @Bean
     public DataSource dataSource(
             @Value("${DATABASE_URL:}") String databaseUrl,
-            @Value("${SQLITE_URL:jdbc:sqlite:./data/bot.sqlite3}") String sqliteUrl
+            @Value("${SQLITE_URL:jdbc:sqlite:bot.sqlite3}") String sqliteUrl
     ) {
         if (databaseUrl != null && !databaseUrl.isBlank()) {
             return postgresDataSource(databaseUrl);
