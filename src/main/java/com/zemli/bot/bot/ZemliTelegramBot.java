@@ -26,6 +26,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
+import java.io.InputStream;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -62,24 +63,34 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             "NETHERITE_ARMOR", 0.50
     );
     private static final List<String> RESOURCES = List.of("WOOD", "STONE", "FOOD", "IRON", "GOLD", "MANA", "ALCOHOL");
-    private static final String MAIN_MENU_COVER_URL = "https://i.imgur.com/8mXGRRK.jpeg";
+    private static final String MAIN_MENU_COVER_URL = "https://i.imgur.com/8YqynEP.jpeg";
     private static final String MAIN_MENU_COVER_CAPTION = "⚔️ ZEMLI — Завоюй мир";
-    private static final String WIN_GIF_URL = "https://media.giphy.com/media/l0MYGb1LuZ3n7dRnO/giphy.gif";
-    private static final String LOSE_GIF_URL = "https://media.giphy.com/media/3o7TKqnN349PBUtGFO/giphy.gif";
-    private static final String LOOT_COMMON_GIF_URL = "https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif";
-    private static final String LOOT_RARE_GIF_URL = "https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif";
-    private static final String LOOT_LEGENDARY_GIF_URL = "https://media.giphy.com/media/l3V0dy1zzyjbYTQQM/giphy.gif";
-    private static final String LOOT_ARMOR_GIF_URL = "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif";
+    private static final String WIN_GIF_URL = "https://i.imgur.com/victory_anime.gif";
+    private static final String LOSE_GIF_URL = "https://i.imgur.com/defeat_anime.gif";
+    private static final String LOOT_COMMON_GIF_URL = "https://i.imgur.com/common_find.gif";
+    private static final String LOOT_RARE_GIF_URL = "https://i.imgur.com/rare_find.gif";
+    private static final String LOOT_LEGENDARY_GIF_URL = "https://i.imgur.com/legendary_find.gif";
+    private static final String LOOT_ARMOR_GIF_URL = "https://i.imgur.com/rare_find.gif";
+    private static final String LEVEL_UP_GIF_URL = "https://i.imgur.com/levelup_city.gif";
+
+    private static final String MAIN_MENU_COVER_RESOURCE = "/images/menu.jpg";
+    private static final String BATTLE_WIN_RESOURCE = "/images/battle_win.gif";
+    private static final String BATTLE_LOSE_RESOURCE = "/images/battle_lose.gif";
+    private static final String LOOT_COMMON_RESOURCE = "/images/rare_find.gif";
+    private static final String LOOT_RARE_RESOURCE = "/images/rare_find.gif";
+    private static final String LOOT_LEGENDARY_RESOURCE = "/images/legendary_find.gif";
+    private static final String LOOT_ARMOR_RESOURCE = "/images/rare_find.gif";
+    private static final String LEVEL_UP_RESOURCE = "/images/levelup.gif";
     private static final List<Faction> FACTION_ORDER = List.of(
             Faction.KNIGHTS, Faction.SAMURAI, Faction.VIKINGS, Faction.MONGOLS, Faction.DESERT_DWELLERS, Faction.AZTECS
     );
     private static final Map<Faction, String> FACTION_IMAGES_PRIMARY = Map.of(
-            Faction.KNIGHTS, "https://i.imgur.com/JKqYmNl.jpeg",
-            Faction.SAMURAI, "https://i.imgur.com/vQ8L2Xk.jpeg",
-            Faction.VIKINGS, "https://i.imgur.com/nR4KpZm.jpeg",
-            Faction.MONGOLS, "https://i.imgur.com/WpX3vNs.jpeg",
-            Faction.DESERT_DWELLERS, "https://i.imgur.com/Lm9KdRt.jpeg",
-            Faction.AZTECS, "https://i.imgur.com/Tz6YqBp.jpeg"
+            Faction.KNIGHTS, "https://i.imgur.com/KmP2vLd.jpeg",
+            Faction.SAMURAI, "https://i.imgur.com/vNqR8Xt.jpeg",
+            Faction.VIKINGS, "https://i.imgur.com/nJkL3Qp.jpeg",
+            Faction.MONGOLS, "https://i.imgur.com/WmX4kRs.jpeg",
+            Faction.DESERT_DWELLERS, "https://i.imgur.com/Lp9KmRt.jpeg",
+            Faction.AZTECS, "https://i.imgur.com/Tz8YqBn.jpeg"
     );
     private static final Map<Faction, String> FACTION_IMAGES_FALLBACK = Map.of(
             Faction.KNIGHTS, "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Medieval_knight.jpg/400px-Medieval_knight.jpg",
@@ -88,6 +99,14 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             Faction.MONGOLS, "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/YuanEmperorAlbumGenghisPortrait.jpg/400px-YuanEmperorAlbumGenghisPortrait.jpg",
             Faction.DESERT_DWELLERS, "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Mamluk_warrior.jpg/400px-Mamluk_warrior.jpg",
             Faction.AZTECS, "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Aztec_Warriors_Florentine_Codex.jpg/400px-Aztec_Warriors_Florentine_Codex.jpg"
+    );
+    private static final Map<Faction, String> FACTION_IMAGE_RESOURCES = Map.of(
+            Faction.KNIGHTS, "/images/faction_knights.jpg",
+            Faction.SAMURAI, "/images/faction_samurai.jpg",
+            Faction.VIKINGS, "/images/faction_vikings.jpg",
+            Faction.MONGOLS, "/images/faction_mongols.jpg",
+            Faction.DESERT_DWELLERS, "/images/faction_desert.jpg",
+            Faction.AZTECS, "/images/faction_aztec.jpg"
     );
 
     private final String configuredToken;
@@ -879,10 +898,14 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                         btn("▶️", "faction:view:" + Math.floorMod(safeIndex + 1, FACTION_ORDER.size()))
                 ))
                 .build();
-        trySendPhotoWithFallbacks(chatId, List.of(
-                FACTION_IMAGES_PRIMARY.get(faction),
-                FACTION_IMAGES_FALLBACK.get(faction)
-        ), "Фракция: " + factionEmoji(faction) + " " + faction.getTitle(), null);
+        sendPhotoResourceWithUrlFallbacks(
+                chatId,
+                FACTION_IMAGE_RESOURCES.get(faction),
+                resourceFileName(FACTION_IMAGE_RESOURCES.get(faction)),
+                List.of(FACTION_IMAGES_PRIMARY.get(faction), FACTION_IMAGES_FALLBACK.get(faction)),
+                "Фракция: " + factionEmoji(faction) + " " + faction.getTitle(),
+                null
+        );
         sendTextRaw(chatId, text, keyboard);
     }
 
@@ -2322,7 +2345,19 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 .keyboardRow(List.of(btn("🔨 Сохранить для крафта", "loot:save:" + found), btn("💰 Продать", "loot:sell:" + found)))
                 .keyboardRow(List.of(btn("🔨 Аукцион", "loot:auction:" + found)))
                 .build();
-        sendAnimationWithFallback(player.telegramId(), gif, text, keyboard);
+        String resource = switch (rarity) {
+            case "LEGENDARY" -> LOOT_LEGENDARY_RESOURCE;
+            case "RARE" -> LOOT_RARE_RESOURCE;
+            default -> LOOT_COMMON_RESOURCE;
+        };
+        sendAnimationResourceWithUrlFallback(
+                player.telegramId(),
+                resource,
+                resourceFileName(resource),
+                gif,
+                text,
+                keyboard
+        );
         if ("LEGENDARY".equals(rarity)) {
             sendGroupMessageAsync("📕🔥 " + player.villageName() + " нашёл легендарный чертёж: " + catalog.itemDisplay(found) + "!!");
         }
@@ -2341,7 +2376,9 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
         gameDao.appendDailyLog("RARE", player.villageName() + " нашёл " + catalog.itemDisplay(found));
         pendingLootByPlayer.put(player.id(), found);
-        sendAnimationWithFallback(player.telegramId(),
+        sendAnimationResourceWithUrlFallback(player.telegramId(),
+                LOOT_ARMOR_RESOURCE,
+                resourceFileName(LOOT_ARMOR_RESOURCE),
                 LOOT_ARMOR_GIF_URL,
                 "🛡️ Ты нашёл " + catalog.itemDisplay(found) + "!\n" +
                         "Бонус защиты: +" + (int) (armorBonus(found) * 100) + "%",
@@ -3307,35 +3344,31 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private void sendBattleSummaryMedia(long chatId, boolean won, String details) {
         String caption = (won ? "🏆 ПОБЕДА!\n" : "💀 ПОРАЖЕНИЕ...\n") + details;
-        sendAnimationWithFallback(chatId, won ? WIN_GIF_URL : LOSE_GIF_URL, caption, null);
+        String resource = won ? BATTLE_WIN_RESOURCE : BATTLE_LOSE_RESOURCE;
+        String url = won ? WIN_GIF_URL : LOSE_GIF_URL;
+        sendAnimationResourceWithUrlFallback(chatId, resource, resourceFileName(resource), url, caption, null);
     }
 
     private void sendCityLevelUpMedia(long chatId, int newCityLevel) {
-        String gif;
         String text;
         switch (newCityLevel) {
             case 2 -> {
-                gif = "https://media.giphy.com/media/l0IykOsxLECVejOzm/giphy.gif";
                 text = "🏘️ Твоя деревня выросла до Посёлка!";
             }
             case 3 -> {
-                gif = "https://media.giphy.com/media/3ohzdIuqJoo8QdKlnW/giphy.gif";
                 text = "🏙️ Поздравляем! Теперь у тебя настоящий Город!";
             }
             case 4 -> {
-                gif = "https://media.giphy.com/media/l0IykOsxLECVejOzm/giphy.gif";
                 text = "🏰 Великолепно! Твой Замок возвышается над землями!";
             }
             case 5 -> {
-                gif = "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif";
                 text = "👑 Да здравствует Король! Твоё Королевство процветает!";
             }
             default -> {
-                gif = "https://media.giphy.com/media/l3V0dy1zzyjbYTQQM/giphy.gif";
                 text = "🌍 Невероятно! Ты построил Империю! Весь мир трепещет!";
             }
         }
-        sendAnimationWithFallback(chatId, gif, text, null);
+        sendAnimationResourceWithUrlFallback(chatId, LEVEL_UP_RESOURCE, "levelup.gif", LEVEL_UP_GIF_URL, text, null);
     }
 
     private InlineKeyboardButton btn(String text, String callbackData) {
@@ -3368,7 +3401,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             if (text != null && !text.isBlank()) {
                 sendTextRaw(chatId, text, null);
             }
-            sendPhotoWithFallback(chatId, MAIN_MENU_COVER_URL, MAIN_MENU_COVER_CAPTION, keyboard);
+            sendPhotoResourceWithUrlFallback(chatId, MAIN_MENU_COVER_RESOURCE, "menu.jpg", MAIN_MENU_COVER_URL, MAIN_MENU_COVER_CAPTION, keyboard);
             return;
         }
         sendTextRaw(chatId, text, keyboard);
@@ -3414,45 +3447,108 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    private boolean trySendPhotoWithFallbacks(long chatId, List<String> photoUrls, String caption, InlineKeyboardMarkup keyboard) {
-        if (photoUrls == null || photoUrls.isEmpty()) {
+    private void sendPhotoResourceWithUrlFallback(long chatId, String resourcePath, String fileName, String photoUrl, String caption, InlineKeyboardMarkup keyboard) {
+        if (sendPhotoFromResource(chatId, resourcePath, fileName, caption, keyboard)) {
+            return;
+        }
+        sendPhotoWithFallback(chatId, photoUrl, caption, keyboard);
+    }
+
+    private void sendPhotoResourceWithUrlFallbacks(long chatId, String resourcePath, String fileName, List<String> photoUrls, String caption, InlineKeyboardMarkup keyboard) {
+        if (sendPhotoFromResource(chatId, resourcePath, fileName, caption, keyboard)) {
+            return;
+        }
+        if (photoUrls != null) {
+            for (String photoUrl : photoUrls) {
+                if (photoUrl == null || photoUrl.isBlank()) {
+                    continue;
+                }
+                try {
+                    SendPhoto photo = SendPhoto.builder()
+                            .chatId(String.valueOf(chatId))
+                            .photo(new InputFile(photoUrl))
+                            .caption(caption)
+                            .replyMarkup(keyboard)
+                            .build();
+                    execute(photo);
+                    return;
+                } catch (Exception e) {
+                    log.warn("Could not send photo {}, trying next/fallback: {}", photoUrl, e.getMessage());
+                }
+            }
+        }
+        sendTextRaw(chatId, caption, keyboard);
+    }
+
+    private boolean sendPhotoFromResource(long chatId, String resourcePath, String fileName, String caption, InlineKeyboardMarkup keyboard) {
+        if (resourcePath == null || resourcePath.isBlank()) {
             return false;
         }
-        for (String url : photoUrls) {
-            if (url == null || url.isBlank()) {
-                continue;
+        try (InputStream is = getClass().getResourceAsStream(resourcePath)) {
+            if (is == null) {
+                return false;
             }
             SendPhoto photo = SendPhoto.builder()
                     .chatId(String.valueOf(chatId))
-                    .photo(new InputFile(url))
+                    .photo(new InputFile(is, fileName))
                     .caption(caption)
                     .replyMarkup(keyboard)
                     .build();
-            try {
-                execute(photo);
-                return true;
-            } catch (Exception e) {
-                log.warn("Could not send photo {}, trying next/fallback: {}", url, e.getMessage());
-            }
+            execute(photo);
+            return true;
+        } catch (Exception e) {
+            log.warn("Could not send photo resource {}, fallback to url/text: {}", resourcePath, e.getMessage());
+            return false;
         }
-        return false;
     }
 
-    private void sendAnimationWithFallback(long chatId, String gifUrl, String caption, InlineKeyboardMarkup keyboard) {
+    private void sendAnimationResourceWithUrlFallback(long chatId, String resourcePath, String fileName, String gifUrl, String caption, InlineKeyboardMarkup keyboard) {
+        if (sendAnimationFromResource(chatId, resourcePath, fileName, caption, keyboard)) {
+            return;
+        }
         if (gifUrl == null || gifUrl.isBlank()) {
             sendTextRaw(chatId, caption, keyboard);
             return;
         }
-        SendAnimation anim = new SendAnimation();
-        anim.setChatId(String.valueOf(chatId));
-        anim.setAnimation(new InputFile(gifUrl));
-        anim.setCaption(caption);
-        anim.setReplyMarkup(keyboard);
         try {
+            SendAnimation anim = new SendAnimation();
+            anim.setChatId(String.valueOf(chatId));
+            anim.setAnimation(new InputFile(gifUrl));
+            anim.setCaption(caption);
+            anim.setReplyMarkup(keyboard);
             execute(anim);
         } catch (Exception e) {
-            log.warn("Could not send animation, sending text only: {}", e.getMessage());
+            log.warn("Could not send animation url, sending text only: {}", e.getMessage());
             sendTextRaw(chatId, caption, keyboard);
         }
+    }
+
+    private boolean sendAnimationFromResource(long chatId, String resourcePath, String fileName, String caption, InlineKeyboardMarkup keyboard) {
+        if (resourcePath == null || resourcePath.isBlank()) {
+            return false;
+        }
+        try (InputStream is = getClass().getResourceAsStream(resourcePath)) {
+            if (is == null) {
+                return false;
+            }
+            SendAnimation anim = new SendAnimation();
+            anim.setChatId(String.valueOf(chatId));
+            anim.setAnimation(new InputFile(is, fileName));
+            anim.setCaption(caption);
+            anim.setReplyMarkup(keyboard);
+            execute(anim);
+            return true;
+        } catch (Exception e) {
+            log.warn("Could not send animation resource {}, fallback to url/text: {}", resourcePath, e.getMessage());
+            return false;
+        }
+    }
+
+    private String resourceFileName(String resourcePath) {
+        if (resourcePath == null || resourcePath.isBlank()) {
+            return "media.bin";
+        }
+        int i = resourcePath.lastIndexOf('/');
+        return i >= 0 ? resourcePath.substring(i + 1) : resourcePath;
     }
 }
