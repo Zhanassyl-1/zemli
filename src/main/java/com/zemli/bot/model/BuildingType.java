@@ -8,6 +8,7 @@ public enum BuildingType {
     PORT,
     TEMPLE,
     MINE,
+    LUMBERMILL,
     FARM,
     TAVERN,
     MARKET

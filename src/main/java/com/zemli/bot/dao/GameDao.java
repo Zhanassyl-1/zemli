@@ -537,18 +537,21 @@ public class GameDao {
             int farmLvl = levels.getOrDefault("FARM", new BuildingState("FARM", 0)).level();
             int lumberLvl = levels.getOrDefault("LUMBERMILL", new BuildingState("LUMBERMILL", 0)).level();
             int tavernLvl = levels.getOrDefault("TAVERN", new BuildingState("TAVERN", 0)).level();
+            int templeLvl = levels.getOrDefault("TEMPLE", new BuildingState("TEMPLE", 0)).level();
+            int marketLvl = levels.getOrDefault("MARKET", new BuildingState("MARKET", 0)).level();
             int morale = loadMorale(player.id());
             boolean mineActive = isPassiveBuildingActive(player.id(), "MINE");
             boolean farmActive = isPassiveBuildingActive(player.id(), "FARM");
             boolean lumberActive = isPassiveBuildingActive(player.id(), "LUMBERMILL");
 
             double moraleMul = morale < 20 ? 0.70 : 1.0;
-            int woodBase = 5 + (lumberActive ? (int) Math.floor(passiveBonusByLevel(lumberLvl, 3)) : 0);
-            int woodIncome = (int) Math.floor(woodBase * multiplier * moraleMul);
-            int stoneIncome = mineActive ? (int) Math.floor((3 + passiveBonusByLevel(mineLvl, 3)) * multiplier * moraleMul) : 0;
-            int foodIncome = farmActive ? (int) Math.floor((4 + passiveBonusByLevel(farmLvl, 3)) * multiplier * moraleMul) : 0;
-            int ironIncome = mineActive ? (int) Math.floor(passiveBonusByLevel(mineLvl, 2) * multiplier * moraleMul) : 0;
-            int alcoholIncome = tavernLvl > 0 ? (int) Math.floor((1 + (tavernLvl - 1)) * multiplier * moraleMul) : 0;
+            int woodIncome = (int) Math.floor((5 + (lumberActive ? lumbermillBonus(lumberLvl) : 0)) * multiplier * moraleMul);
+            int stoneIncome = (int) Math.floor((3 + (mineActive ? mineStoneBonus(mineLvl) : 0)) * multiplier * moraleMul);
+            int foodIncome = (int) Math.floor((4 + (farmActive ? farmBonus(farmLvl) : 0)) * multiplier * moraleMul);
+            int ironIncome = (int) Math.floor((2 + (mineActive ? mineIronBonus(mineLvl) : 0)) * multiplier * moraleMul);
+            int goldIncome = (int) Math.floor((1 + marketBonus(marketLvl)) * multiplier * moraleMul);
+            int manaIncome = (int) Math.floor(templeBonus(templeLvl) * multiplier * moraleMul);
+            int alcoholIncome = (int) Math.floor(tavernBonus(tavernLvl) * multiplier * moraleMul);
 
             jdbcTemplate.update(
                     """
@@ -557,6 +560,8 @@ public class GameDao {
                         stone = stone + ?,
                         food = food + ?,
                         iron = iron + ?,
+                        gold = gold + ?,
+                        mana = mana + ?,
                         alcohol = alcohol + ?
                     WHERE player_id = ?
                     """,
@@ -564,6 +569,8 @@ public class GameDao {
                     stoneIncome,
                     foodIncome,
                     ironIncome,
+                    goldIncome,
+                    manaIncome,
                     alcoholIncome,
                     player.id()
             );
@@ -1674,10 +1681,66 @@ public class GameDao {
         }
     }
 
-    private double passiveBonusByLevel(int level, double baseBonus) {
-        if (level <= 0) {
-            return 0.0;
-        }
-        return baseBonus * (1.0 + (level - 1) * 0.5);
+    private int lumbermillBonus(int level) {
+        return switch (level) {
+            case 1 -> 8;
+            case 2 -> 15;
+            case 3 -> 25;
+            default -> 0;
+        };
+    }
+
+    private int mineStoneBonus(int level) {
+        return switch (level) {
+            case 1 -> 4;
+            case 2 -> 8;
+            case 3 -> 12;
+            default -> 0;
+        };
+    }
+
+    private int mineIronBonus(int level) {
+        return switch (level) {
+            case 1 -> 3;
+            case 2 -> 6;
+            case 3 -> 10;
+            default -> 0;
+        };
+    }
+
+    private int farmBonus(int level) {
+        return switch (level) {
+            case 1 -> 6;
+            case 2 -> 12;
+            case 3 -> 20;
+            default -> 0;
+        };
+    }
+
+    private int tavernBonus(int level) {
+        return switch (level) {
+            case 1 -> 2;
+            case 2 -> 5;
+            case 3 -> 9;
+            default -> 0;
+        };
+    }
+
+    private int templeBonus(int level) {
+        return switch (level) {
+            case 1 -> 2;
+            case 2 -> 5;
+            case 3 -> 9;
+            default -> 0;
+        };
+    }
+
+    private int marketBonus(int level) {
+        return switch (level) {
+            case 1 -> 2;
+            case 2 -> 5;
+            case 3 -> 9;
+            default -> 0;
+        };
     }
 }

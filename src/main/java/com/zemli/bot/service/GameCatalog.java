@@ -28,13 +28,13 @@ public class GameCatalog {
         buildings.put("BARRACKS", new BuildingSpec("BARRACKS", "Казарма", "🛡️", 1, new Cost(80, 60, 0, 0, 0, 0, 0), 2));
         buildings.put("RANGE", new BuildingSpec("RANGE", "Стрельбище", "🏹", 1, new Cost(120, 100, 0, 0, 0, 0, 0), 3));
         buildings.put("STABLE", new BuildingSpec("STABLE", "Конюшня", "🐎", 1, new Cost(200, 150, 0, 30, 0, 0, 0), 5));
-        buildings.put("FARM", new BuildingSpec("FARM", "Ферма", "🌾", 1, new Cost(60, 40, 0, 0, 0, 0, 0), 1));
-        buildings.put("MINE", new BuildingSpec("MINE", "Шахта", "⛏️", 1, new Cost(70, 50, 0, 0, 0, 0, 0), 2));
-        buildings.put("LUMBERMILL", new BuildingSpec("LUMBERMILL", "Лесопилка", "🪵", 1, new Cost(90, 60, 0, 0, 0, 0, 0), 2));
+        buildings.put("FARM", new BuildingSpec("FARM", "Ферма", "🌾", 1, new Cost(0, 70, 40, 0, 0, 0, 0), 1));
+        buildings.put("MINE", new BuildingSpec("MINE", "Шахта", "⛏️", 1, new Cost(0, 90, 60, 0, 0, 0, 0), 2));
+        buildings.put("LUMBERMILL", new BuildingSpec("LUMBERMILL", "Лесопилка", "🪵", 1, new Cost(0, 80, 50, 0, 0, 0, 0), 2));
         buildings.put("TAVERN", new BuildingSpec("TAVERN", "Таверна", "🍺", 1, new Cost(100, 80, 0, 0, 20, 0, 0), 2));
-        buildings.put("MARKET", new BuildingSpec("MARKET", "Рынок", "🏦", 2, new Cost(150, 120, 0, 0, 50, 0, 0), 4));
+        buildings.put("MARKET", new BuildingSpec("MARKET", "Рынок", "🏦", 2, new Cost(120, 120, 80, 0, 50, 0, 0), 4));
         buildings.put("PORT", new BuildingSpec("PORT", "Порт", "⚓", 3, new Cost(200, 150, 0, 50, 0, 0, 0), 6));
-        buildings.put("TEMPLE", new BuildingSpec("TEMPLE", "Храм", "🛕", 4, new Cost(250, 200, 0, 0, 0, 30, 0), 8));
+        buildings.put("TEMPLE", new BuildingSpec("TEMPLE", "Храм", "🛕", 3, new Cost(150, 150, 100, 0, 0, 0, 0), 8));
 
         putUpgradeCosts("TOWN_HALL", Map.of(
                 2, new Cost(500, 400, 0, 0, 200, 0, 0),
@@ -57,20 +57,28 @@ public class GameCatalog {
                 3, new Cost(600, 500, 0, 200, 150, 0, 0)
         ));
         putUpgradeCosts("MINE", Map.of(
-                2, new Cost(200, 150, 0, 50, 0, 0, 0),
-                3, new Cost(500, 400, 0, 150, 0, 0, 0)
+                2, new Cost(0, 150, 100, 40, 30, 0, 0),
+                3, new Cost(0, 300, 200, 90, 80, 0, 0)
         ));
         putUpgradeCosts("LUMBERMILL", Map.of(
-                2, new Cost(200, 150, 0, 50, 0, 0, 0),
-                3, new Cost(500, 400, 0, 150, 0, 0, 0)
+                2, new Cost(0, 150, 100, 0, 30, 0, 0),
+                3, new Cost(0, 300, 200, 0, 80, 0, 0)
         ));
         putUpgradeCosts("FARM", Map.of(
-                2, new Cost(150, 100, 0, 0, 0, 0, 0),
-                3, new Cost(400, 300, 0, 0, 50, 0, 0)
+                2, new Cost(0, 130, 90, 0, 20, 0, 0),
+                3, new Cost(0, 280, 180, 0, 60, 0, 0)
         ));
         putUpgradeCosts("TAVERN", Map.of(
-                2, new Cost(200, 150, 0, 0, 50, 0, 0),
-                3, new Cost(500, 400, 0, 0, 150, 0, 0)
+                2, new Cost(120, 120, 80, 0, 40, 0, 0),
+                3, new Cost(250, 250, 160, 0, 100, 0, 0)
+        ));
+        putUpgradeCosts("MARKET", Map.of(
+                2, new Cost(180, 180, 120, 0, 100, 0, 0),
+                3, new Cost(350, 350, 250, 60, 220, 0, 0)
+        ));
+        putUpgradeCosts("TEMPLE", Map.of(
+                2, new Cost(200, 180, 140, 0, 80, 40, 0),
+                3, new Cost(380, 320, 260, 0, 180, 100, 0)
         ));
 
         unitsByFaction.put(Faction.KNIGHTS, List.of(

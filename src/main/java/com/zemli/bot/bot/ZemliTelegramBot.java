@@ -17,6 +17,8 @@ import org.springframework.core.task.TaskExecutor;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
+import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -59,6 +61,17 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             "NETHERITE_ARMOR", 0.50
     );
     private static final List<String> RESOURCES = List.of("WOOD", "STONE", "FOOD", "IRON", "GOLD", "MANA", "ALCOHOL");
+    private static final List<Faction> FACTION_ORDER = List.of(
+            Faction.KNIGHTS, Faction.SAMURAI, Faction.VIKINGS, Faction.MONGOLS, Faction.DESERT_DWELLERS, Faction.AZTECS
+    );
+    private static final Map<Faction, String> FACTION_IMAGES = Map.of(
+            Faction.KNIGHTS, "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Knight_tournament.jpg/640px-Knight_tournament.jpg",
+            Faction.SAMURAI, "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Shimazu_Yoshihiro.jpg/640px-Shimazu_Yoshihiro.jpg",
+            Faction.VIKINGS, "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Varangian_guard.jpg/640px-Varangian_guard.jpg",
+            Faction.MONGOLS, "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Genghis_Khan_empire.jpg/640px-Genghis_Khan_empire.jpg",
+            Faction.DESERT_DWELLERS, "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/Mamluk_warrior.jpg/640px-Mamluk_warrior.jpg",
+            Faction.AZTECS, "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Aztec_warriors.jpg/640px-Aztec_warriors.jpg"
+    );
 
     private final String configuredToken;
     private final String botUsername;
@@ -301,7 +314,8 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                     sendText(chatId, "Название деревни должно быть 3-32 символа.");
                     return;
                 }
-                sendText(chatId, "Отлично. Теперь выбери фракцию:", factionListKeyboard());
+                sendText(chatId, "Отлично. Теперь выбери фракцию:");
+                showFactionCard(chatId, 0);
                 return;
             }
         }
@@ -649,14 +663,33 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         touchPlayerActivity(tgId);
         long chatId = callback.getMessage().getChatId();
 
-        if (data.startsWith("faction:pick:")) {
-            Faction faction = Faction.valueOf(data.substring("faction:pick:".length()));
-            sendText(chatId,
-                    catalog.fullFactionDescription(faction),
-                    InlineKeyboardMarkup.builder()
-                            .keyboardRow(List.of(btn("✅ Выбрать", "faction:confirm:" + faction.name())))
-                            .keyboardRow(List.of(btn("◀️ Назад", "start:open")))
-                            .build());
+        if (data.startsWith("faction:view:")) {
+            if (!registrationService.isWaitingFaction(tgId)) {
+                sendText(chatId, "Сначала введи название деревни текстом.");
+                return;
+            }
+            int index = Integer.parseInt(data.substring("faction:view:".length()));
+            showFactionCard(chatId, index);
+            return;
+        }
+
+        if (data.startsWith("faction:choose:")) {
+            if (!registrationService.isWaitingFaction(tgId)) {
+                sendText(chatId, "Сначала введи название деревни текстом.");
+                return;
+            }
+            Faction faction = Faction.valueOf(data.substring("faction:choose:".length()));
+            showFactionConfirm(chatId, faction);
+            return;
+        }
+
+        if (data.startsWith("faction:back:")) {
+            if (!registrationService.isWaitingFaction(tgId)) {
+                sendText(chatId, "Сначала введи название деревни текстом.");
+                return;
+            }
+            int index = Integer.parseInt(data.substring("faction:back:".length()));
+            showFactionCard(chatId, index);
             return;
         }
 
@@ -685,7 +718,8 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                     "✅ Регистрация завершена!\n\n" +
                             "Деревня: " + player.villageName() + "\n" +
                             "Фракция: " + faction.getTitle() + "\n" +
-                            "Старт: дерево 200, камень 150, еда 200, золото 50",
+                            "Старт: дерево 200, камень 150, еда 200, золото 50\n\n" +
+                            factionFinalMessage(faction),
                     menuService.mainMenu());
             return;
         }
@@ -817,12 +851,143 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 .build();
     }
 
-    private InlineKeyboardMarkup factionListKeyboard() {
-        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-        for (Faction f : Faction.values()) {
-            rows.add(List.of(btn(catalog.shortFactionLabel(f), "faction:pick:" + f.name())));
-        }
-        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    private void showFactionCard(long chatId, int index) {
+        int safeIndex = Math.floorMod(index, FACTION_ORDER.size());
+        Faction faction = FACTION_ORDER.get(safeIndex);
+        String text = factionCardText(faction);
+        InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
+                .keyboardRow(List.of(
+                        btn("◀️", "faction:view:" + Math.floorMod(safeIndex - 1, FACTION_ORDER.size())),
+                        btn("✅ Выбрать " + faction.getTitle(), "faction:choose:" + faction.name()),
+                        btn("▶️", "faction:view:" + Math.floorMod(safeIndex + 1, FACTION_ORDER.size()))
+                ))
+                .build();
+        sendPhotoWithFallback(chatId, FACTION_IMAGES.get(faction), text, keyboard);
+    }
+
+    private void showFactionConfirm(long chatId, Faction faction) {
+        int index = FACTION_ORDER.indexOf(faction);
+        sendText(chatId,
+                "Ты выбрал: " + factionEmoji(faction) + " " + faction.getTitle() + "\n" +
+                        "Это постоянный выбор — изменить нельзя!",
+                InlineKeyboardMarkup.builder()
+                        .keyboardRow(List.of(
+                                btn("✅ Да, я " + faction.getTitle() + "!", "faction:confirm:" + faction.name()),
+                                btn("◀️ Выбрать другую", "faction:back:" + Math.max(0, index))
+                        ))
+                        .build());
+    }
+
+    private String factionCardText(Faction faction) {
+        return switch (faction) {
+            case KNIGHTS -> "=== РЫЦАРИ ===\n\n⚔️ РЫЦАРИ ЗАПАДА\n\n" +
+                    "Благородные воины в тяжёлых доспехах.\n" +
+                    "Медленные но непробиваемые.\n\n" +
+                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "- Лучшая броня на сервере\n" +
+                    "- +20% защита против лучников\n" +
+                    "- Паладины — самые мощные юниты\n" +
+                    "- Идеальны для обороны\n\n" +
+                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
+                    "- Самый долгий откат после боя — 12ч\n" +
+                    "- Дорогие юниты требуют много ресурсов\n" +
+                    "- Слабы на море и в джунглях\n" +
+                    "- Медленное развитие\n\n" +
+                    "⚔️ Путь воина: Мечник → Арбалетчик → Паладин";
+            case SAMURAI -> "=== САМУРАИ ===\n\n🥷 САМУРАИ ВОСТОКА\n\n" +
+                    "Дисциплина и мастерство клинка.\n" +
+                    "Быстрые и смертоносные в ближнем бою.\n\n" +
+                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "- +15% бонус в ближнем бою\n" +
+                    "- Быстрое обучение воинов\n" +
+                    "- Сбалансированные юниты\n" +
+                    "- Хороши как в атаке так и в обороне\n\n" +
+                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
+                    "- Слабы на море (-20% на воде)\n" +
+                    "- Средняя броня\n" +
+                    "- Нет особых бонусов к ресурсам\n\n" +
+                    "⚔️ Путь воина: Асигару → Лучник → Самурай";
+            case VIKINGS -> "=== ВИКИНГИ ===\n\n🪓 ВИКИНГИ СЕВЕРА\n\n" +
+                    "Берсерки которые не знают страха.\n" +
+                    "Непобедимы на море и в набегах.\n\n" +
+                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "- +25% бонус на море\n" +
+                    "- Порт даёт в 2 раза больше юнитов\n" +
+                    "- Берсерки — дешёвые но яростные\n" +
+                    "- Лучшие для быстрых набегов\n\n" +
+                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
+                    "- Слабы в обороне (-15%)\n" +
+                    "- Уязвимы к магии Ацтеков\n" +
+                    "- Плохо держат осаду\n\n" +
+                    "⚔️ Путь воина: Берсерк → Лучник → Ярл";
+            case MONGOLS -> "=== МОНГОЛЫ ===\n\n🏹 МОНГОЛЫ СТЕПИ\n\n" +
+                    "Непобедимая конница. Быстрее всех.\n" +
+                    "Империя которая покорила полмира.\n\n" +
+                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "- Самый короткий откат после боя — 4ч\n" +
+                    "- В степи: победа ×1.1, поражение ×0.9\n" +
+                    "- Всадники — лучшая кавалерия\n" +
+                    "- Идеальны для частых атак\n\n" +
+                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
+                    "- Штраф в холоде и на море\n" +
+                    "- Слабая оборона городов\n" +
+                    "- Зависят от конюшни\n\n" +
+                    "⚔️ Путь воина: Лучник → Всадник → Хан";
+            case DESERT_DWELLERS -> "=== ПУСТЫННИКИ ===\n\n🐪 ПУСТЫННИКИ ВОСТОКА\n\n" +
+                    "Выносливые воины пустыни.\n" +
+                    "Дешёвые и надёжные — идеально для новичков.\n\n" +
+                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "- Самые дешёвые юниты\n" +
+                    "- +15% в жаре и пустыне\n" +
+                    "- Не требуют много ресурсов\n" +
+                    "- Хороший баланс атака/защита\n\n" +
+                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
+                    "- Нет выдающихся бонусов\n" +
+                    "- Средняя мощь юнитов\n" +
+                    "- Штраф в холоде\n\n" +
+                    "⚔️ Путь воина: Копейщик → Лучник → Мамлюк";
+            case AZTECS -> "=== АЦТЕКИ ===\n\n🗿 АЦТЕКИ ДЖУНГЛЕЙ\n\n" +
+                    "Мистические воины с силой богов.\n" +
+                    "Манна даёт им сверхъестественную мощь.\n\n" +
+                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "- +20% производство манны\n" +
+                    "- +15% в джунглях\n" +
+                    "- Жрецы-воины — уникальные юниты с магией\n" +
+                    "- Особые способности в бою\n\n" +
+                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
+                    "- Слабы против тяжёлой брони\n" +
+                    "- Требуют манну для сильных юнитов\n" +
+                    "- Сложнее в управлении\n\n" +
+                    "⚔️ Путь воина: Воин → Ягуар → Жрец-воин";
+        };
+    }
+
+    private String factionFinalMessage(Faction faction) {
+        String tip = switch (faction) {
+            case KNIGHTS -> "Держи оборону и накапливай тяжёлую армию перед рывком.";
+            case SAMURAI -> "Ищи ранние дуэли: твой ближний бой раскрывается быстрее других.";
+            case VIKINGS -> "Играй агрессивно и чаще ходи в набеги, пока враги слабы.";
+            case MONGOLS -> "Твоя сила в темпе: атакуй чаще и не затягивай войны.";
+            case DESERT_DWELLERS -> "Дави количеством: дешёвые юниты дают стабильный перевес.";
+            case AZTECS -> "Разгоняй манну раньше остальных и усиливай магические отряды.";
+        };
+        return "🎉 Отличный выбор!\n\n" +
+                "Ты — " + faction.getTitle() + "\n" +
+                "Твои воины уже ждут приказа.\n\n" +
+                "Помни:\n" +
+                tip + "\n\n" +
+                "Удачи в завоеваниях, правитель! ⚔️";
+    }
+
+    private String factionEmoji(Faction faction) {
+        return switch (faction) {
+            case KNIGHTS -> "⚔️";
+            case SAMURAI -> "🥷";
+            case VIKINGS -> "🪓";
+            case MONGOLS -> "🏹";
+            case DESERT_DWELLERS -> "🐪";
+            case AZTECS -> "🗿";
+        };
     }
 
     private void showBuildTab(long chatId, PlayerRecord player, String tab) {
@@ -1045,6 +1210,8 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         int mineLvl = bmap.getOrDefault("MINE", new BuildingState("MINE", 0)).level();
         int farmLvl = bmap.getOrDefault("FARM", new BuildingState("FARM", 0)).level();
         int lumberLvl = bmap.getOrDefault("LUMBERMILL", new BuildingState("LUMBERMILL", 0)).level();
+        int tavernLvl = bmap.getOrDefault("TAVERN", new BuildingState("TAVERN", 0)).level();
+        int templeLvl = bmap.getOrDefault("TEMPLE", new BuildingState("TEMPLE", 0)).level();
         int marketLvl = bmap.getOrDefault("MARKET", new BuildingState("MARKET", 0)).level();
         boolean mineActive = gameDao.isPassiveBuildingActive(player.id(), "MINE");
         boolean farmActive = gameDao.isPassiveBuildingActive(player.id(), "FARM");
@@ -1052,15 +1219,19 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         long now = Instant.now().toEpochMilli();
         long nextTickMs = nextPassiveTickEpoch(now);
 
-        int stoneTick = (int) Math.floor(3 + passiveBonusByLevel(mineLvl, 3));
-        int ironTick = (int) Math.floor(passiveBonusByLevel(mineLvl, 2));
-        int foodTick = (int) Math.floor(4 + passiveBonusByLevel(farmLvl, 3));
-        int woodTick = 5 + (lumberActive ? (int) Math.floor(passiveBonusByLevel(lumberLvl, 3)) : 0);
+        int woodTick = 5 + (lumberActive ? lumbermillBonus(lumberLvl) : 0);
+        int stoneTick = 3 + (mineActive ? mineStoneBonus(mineLvl) : 0);
+        int foodTick = 4 + (farmActive ? farmBonus(farmLvl) : 0);
+        int ironTick = 2 + (mineActive ? mineIronBonus(mineLvl) : 0);
+        int goldTick = 1 + marketBonus(marketLvl);
+        int manaTick = templeBonus(templeLvl);
+        int alcoholTick = tavernBonus(tavernLvl);
 
         StringBuilder text = new StringBuilder();
         text.append("Что добываешь?\n");
         text.append("[ 🪵 Ресурсы ] [ 💰 Золото ]\n\n");
-        text.append("💰 Золото за добычу: 30-80");
+        text.append("Базовый пассив (каждые 10 мин): 🪵+5 🪨+3 🌾+4 ⚔️+2 💰+1\n");
+        text.append("💰 Золото за активную добычу: 30-80");
         if (marketLvl >= 2) {
             text.append(" (+50% от рынка ур.2+)");
         }
@@ -1086,6 +1257,9 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             text.append("Добывает каждые 10 мин:\n");
             text.append("🪵 Дерево: +").append(woodTick).append("\n");
         }
+        text.append("\n🍺 Таверна ур.").append(tavernLvl).append(" → +").append(alcoholTick).append(" алкоголя / 10 мин");
+        text.append("\n🧪 Храм ур.").append(templeLvl).append(" → +").append(manaTick).append(" манны / 10 мин");
+        text.append("\n🏦 Рынок ур.").append(marketLvl).append(" → +").append(goldTick).append(" золота / 10 мин");
         text.append("Следующая добыча через: ").append(harvestCooldownText(Math.max(0L, nextTickMs - now)).replace("⏳ Следующая добыча через: ", "")).append("\n");
 
         Long cd = gameDao.getPlayerState(player.id(), "MINE_COOLDOWN_UNTIL");
@@ -1142,12 +1316,14 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             int farmLvl = bmap.getOrDefault("FARM", new BuildingState("FARM", 0)).level();
             int lumberLvl = bmap.getOrDefault("LUMBERMILL", new BuildingState("LUMBERMILL", 0)).level();
             boolean lumberActive = gameDao.isPassiveBuildingActive(player.id(), "LUMBERMILL");
+            boolean mineActive = gameDao.isPassiveBuildingActive(player.id(), "MINE");
+            boolean farmActive = gameDao.isPassiveBuildingActive(player.id(), "FARM");
             DailyEventType event = activeDailyEvent();
 
-            int passiveWood = 5 + (lumberActive ? (int) Math.floor(passiveBonusByLevel(lumberLvl, 3)) : 0);
-            int passiveStone = 3 + (int) Math.floor(passiveBonusByLevel(mineLvl, 3));
-            int passiveFood = 4 + (int) Math.floor(passiveBonusByLevel(farmLvl, 3));
-            int passiveIron = (int) Math.floor(passiveBonusByLevel(mineLvl, 2));
+            int passiveWood = 5 + (lumberActive ? lumbermillBonus(lumberLvl) : 0);
+            int passiveStone = 3 + (mineActive ? mineStoneBonus(mineLvl) : 0);
+            int passiveFood = 4 + (farmActive ? farmBonus(farmLvl) : 0);
+            int passiveIron = 2 + (mineActive ? mineIronBonus(mineLvl) : 0);
             double eventMul = 1.0;
             if (event == DailyEventType.HARVEST_DAY) {
                 eventMul = 1.2;
@@ -2985,11 +3161,67 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         return ThreadLocalRandom.current().nextInt(from, to + 1);
     }
 
-    private double passiveBonusByLevel(int level, double baseBonus) {
-        if (level <= 0) {
-            return 0.0;
-        }
-        return baseBonus * (1.0 + (level - 1) * 0.5);
+    private int lumbermillBonus(int level) {
+        return switch (level) {
+            case 1 -> 8;
+            case 2 -> 15;
+            case 3 -> 25;
+            default -> 0;
+        };
+    }
+
+    private int mineStoneBonus(int level) {
+        return switch (level) {
+            case 1 -> 4;
+            case 2 -> 8;
+            case 3 -> 12;
+            default -> 0;
+        };
+    }
+
+    private int mineIronBonus(int level) {
+        return switch (level) {
+            case 1 -> 3;
+            case 2 -> 6;
+            case 3 -> 10;
+            default -> 0;
+        };
+    }
+
+    private int farmBonus(int level) {
+        return switch (level) {
+            case 1 -> 6;
+            case 2 -> 12;
+            case 3 -> 20;
+            default -> 0;
+        };
+    }
+
+    private int tavernBonus(int level) {
+        return switch (level) {
+            case 1 -> 2;
+            case 2 -> 5;
+            case 3 -> 9;
+            default -> 0;
+        };
+    }
+
+    private int templeBonus(int level) {
+        return switch (level) {
+            case 1 -> 2;
+            case 2 -> 5;
+            case 3 -> 9;
+            default -> 0;
+        };
+    }
+
+    private int marketBonus(int level) {
+        return switch (level) {
+            case 1 -> 2;
+            case 2 -> 5;
+            case 3 -> 9;
+            default -> 0;
+        };
     }
 
     private String harvestCooldownText(long remainingMs) {
@@ -3073,6 +3305,25 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             execute(msg);
         } catch (Exception e) {
             log.error("Failed to send message", e);
+        }
+    }
+
+    private void sendPhotoWithFallback(long chatId, String photoUrl, String caption, InlineKeyboardMarkup keyboard) {
+        if (photoUrl == null || photoUrl.isBlank()) {
+            sendText(chatId, caption, keyboard);
+            return;
+        }
+        SendPhoto photo = SendPhoto.builder()
+                .chatId(String.valueOf(chatId))
+                .photo(new InputFile(photoUrl))
+                .caption(caption)
+                .replyMarkup(keyboard)
+                .build();
+        try {
+            execute(photo);
+        } catch (Exception e) {
+            log.warn("Failed to send faction photo, fallback to text: {}", e.getMessage());
+            sendText(chatId, caption, keyboard);
         }
     }
 }
