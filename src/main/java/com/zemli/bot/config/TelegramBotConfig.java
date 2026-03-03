@@ -3,6 +3,7 @@ package com.zemli.bot.config;
 import com.zemli.bot.bot.ZemliTelegramBot;
 import com.zemli.bot.dao.GameDao;
 import com.zemli.bot.service.GameCatalog;
+import com.zemli.bot.service.ImageService;
 import com.zemli.bot.service.MenuService;
 import com.zemli.bot.service.RegistrationService;
 import org.slf4j.Logger;
@@ -46,6 +47,7 @@ public class TelegramBotConfig {
             MenuService menuService,
             GameDao gameDao,
             GameCatalog gameCatalog,
+            ImageService imageService,
             TaskExecutor taskExecutor,
             Environment environment
     ) {
@@ -74,6 +76,7 @@ public class TelegramBotConfig {
                 menuService,
                 gameDao,
                 gameCatalog,
+                imageService,
                 taskExecutor,
                 groupChatId == null ? 0L : groupChatId,
                 adminIds

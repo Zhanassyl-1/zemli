@@ -11,6 +11,7 @@ import com.zemli.bot.model.ResourcesRecord;
 import com.zemli.bot.service.GameCatalog;
 import com.zemli.bot.service.Hero;
 import com.zemli.bot.service.BattleSystem;
+import com.zemli.bot.service.ImageService;
 import com.zemli.bot.service.MenuService;
 import com.zemli.bot.service.RegistrationService;
 import com.zemli.bot.service.Tactics;
@@ -20,6 +21,7 @@ import org.springframework.core.task.TaskExecutor;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -138,6 +140,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private final MenuService menuService;
     private final GameDao gameDao;
     private final GameCatalog catalog;
+    private final ImageService imageService;
     private final TaskExecutor taskExecutor;
     private final long groupChatId;
     private final Set<Long> adminUserIds;
@@ -159,6 +162,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             MenuService menuService,
             GameDao gameDao,
             GameCatalog catalog,
+            ImageService imageService,
             TaskExecutor taskExecutor,
             long groupChatId,
             String adminIdsRaw
@@ -170,6 +174,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         this.menuService = menuService;
         this.gameDao = gameDao;
         this.catalog = catalog;
+        this.imageService = imageService;
         this.taskExecutor = taskExecutor;
         this.groupChatId = groupChatId;
         this.adminUserIds = parseAdminIds(adminIdsRaw);
@@ -2647,7 +2652,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         gameDao.logBattle(a.id(), d.id(), attackerPower, defenderPower, winner.id(), stolenGold);
         gameDao.appendDailyLog("BATTLE", a.villageName() + " vs " + d.villageName() + " -> победа " + winner.villageName());
 
-        sendBattleSummaryMedia(a.telegramId(), winner.id() == a.id(), buildBattleSummary(
+        sendBattleSummaryMedia(a.telegramId(), winner.id() == a.id(), a.faction(), d.faction(), buildBattleSummary(
                 a,
                 winner.id() == a.id(),
                 attackerLosses,
@@ -2655,7 +2660,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 winner.id() == a.id(),
                 stolenWood, stolenStone, stolenFood, stolenIron, stolenGold, stolenMana, stolenAlcohol
         ));
-        sendBattleSummaryMedia(d.telegramId(), winner.id() == d.id(), buildBattleSummary(
+        sendBattleSummaryMedia(d.telegramId(), winner.id() == d.id(), d.faction(), a.faction(), buildBattleSummary(
                 d,
                 winner.id() == d.id(),
                 defenderLosses,
@@ -2770,7 +2775,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         gameDao.logBattle(attacker.id(), defender.id(), aPow, dPow, winner.id(), lootGold);
         gameDao.appendDailyLog("BATTLE", attacker.villageName() + " vs " + defender.villageName() + " -> победа " + winner.villageName() + " (авто)");
 
-        sendBattleSummaryMedia(attacker.telegramId(), winner.id() == attacker.id(), buildBattleSummary(
+        sendBattleSummaryMedia(attacker.telegramId(), winner.id() == attacker.id(), attacker.faction(), defender.faction(), buildBattleSummary(
                 attacker,
                 winner.id() == attacker.id(),
                 winner.id() == attacker.id() ? winnerLosses : loserLosses,
@@ -2778,7 +2783,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 winner.id() == attacker.id(),
                 lootWood, lootStone, lootFood, 0, lootGold, 0, 0
         ));
-        sendBattleSummaryMedia(defender.telegramId(), winner.id() == defender.id(), buildBattleSummary(
+        sendBattleSummaryMedia(defender.telegramId(), winner.id() == defender.id(), defender.faction(), attacker.faction(), buildBattleSummary(
                 defender,
                 winner.id() == defender.id(),
                 winner.id() == defender.id() ? winnerLosses : loserLosses,
@@ -4113,9 +4118,44 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         return sb.toString();
     }
 
-    private void sendBattleSummaryMedia(long chatId, boolean won, String details) {
+    private void sendBattleSummaryMedia(long chatId, boolean won, Faction playerFaction, Faction enemyFaction, String details) {
+        try {
+            if (won) {
+                handleVictory(String.valueOf(chatId), raceImageKey(playerFaction), raceImageKey(enemyFaction));
+            } else {
+                handleDefeat(String.valueOf(chatId), raceImageKey(playerFaction));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to send battle image: {}", e.getMessage());
+        }
         String caption = (won ? "🏆 ПОБЕДА!\n" : "💀 ПОРАЖЕНИЕ...\n") + details;
         sendTextRaw(chatId, caption, null);
+    }
+
+    private String raceImageKey(Faction faction) {
+        return switch (faction) {
+            case KNIGHTS -> "KNIGHT";
+            case SAMURAI -> "SAMURAI";
+            case VIKINGS -> "VIKING";
+            case MONGOLS -> "MONGOL";
+            case DESERT_DWELLERS -> "ARABIAN";
+            case AZTECS -> "AZTEC";
+        };
+    }
+
+    private void handleVictory(String chatId, String winnerRace, String loserRace) throws Exception {
+        SendPhoto victoryPhoto = imageService.getVictoryImage(winnerRace, loserRace, chatId);
+        execute(victoryPhoto);
+    }
+
+    private void handleDefeat(String chatId, String playerRace) throws Exception {
+        SendPhoto defeatPhoto = imageService.getDefeatImage(playerRace, chatId);
+        execute(defeatPhoto);
+    }
+
+    private void handleArtifactFound(String chatId, String artifactName) throws Exception {
+        SendPhoto artifactPhoto = imageService.getArtifactImage(chatId, artifactName);
+        execute(artifactPhoto);
     }
 
     private void sendCityLevelUpMedia(long chatId, int newCityLevel) {
