@@ -82,6 +82,55 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private static final List<Faction> FACTION_ORDER = List.of(
             Faction.KNIGHTS, Faction.SAMURAI, Faction.VIKINGS, Faction.MONGOLS, Faction.DESERT_DWELLERS, Faction.AZTECS
     );
+    private static final int BATTLE_ROUNDS = 5;
+    private static final long ATTACK_COOLDOWN_MS = 15 * 60_000L;
+    private static final long UNIQUE_TACTIC_COOLDOWN_MS = 30 * 60_000L;
+    private static final String STATE_ATTACK_CD_UNTIL = "ATTACK_CD_UNTIL";
+    private static final String STATE_HERO_CD_UNTIL = "HERO_CD_UNTIL";
+    private static final Map<Faction, Set<String>> FAVORITE_TACTICS = Map.of(
+            Faction.KNIGHTS, Set.of("PHALANX", "WALL"),
+            Faction.SAMURAI, Set.of("SNIPER", "SM_IAIDO"),
+            Faction.VIKINGS, Set.of("RAGE", "BERSERK"),
+            Faction.MONGOLS, Set.of("SCOUT", "MG_STEPPE_WIND"),
+            Faction.DESERT_DWELLERS, Set.of("FEINT", "DS_MIRAGE"),
+            Faction.AZTECS, Set.of("SACRIFICE", "AZ_BLOOD_SUN")
+    );
+    private static final Map<Faction, String> UNIQUE_TACTIC_BY_FACTION = Map.of(
+            Faction.KNIGHTS, "KN_IMPREGNABILITY",
+            Faction.SAMURAI, "SM_IAIDO",
+            Faction.VIKINGS, "VK_VALHALLA",
+            Faction.MONGOLS, "MG_STEPPE_WIND",
+            Faction.DESERT_DWELLERS, "DS_MIRAGE",
+            Faction.AZTECS, "AZ_BLOOD_SUN"
+    );
+    private static final Map<Faction, Integer> UNIQUE_TACTIC_ROUND = Map.of(
+            Faction.KNIGHTS, 3,
+            Faction.SAMURAI, 4,
+            Faction.VIKINGS, 5,
+            Faction.MONGOLS, 2,
+            Faction.DESERT_DWELLERS, 1,
+            Faction.AZTECS, 4
+    );
+    private static final Map<String, Set<String>> TACTIC_COUNTERS = Map.ofEntries(
+            Map.entry("SCOUT", Set.of("AMBUSH")),
+            Map.entry("AMBUSH", Set.of("RAGE", "TOTAL_ATTACK")),
+            Map.entry("DEFENSE", Set.of("TOTAL_ATTACK")),
+            Map.entry("FEINT", Set.of("SCOUT", "BERSERK")),
+            Map.entry("ARSON", Set.of("TURTLE")),
+            Map.entry("TURTLE", Set.of("SNIPER")),
+            Map.entry("DISPERSE", Set.of("ARSON")),
+            Map.entry("SNIPER", Set.of("HERO")),
+            Map.entry("RAGE", Set.of("WALL")),
+            Map.entry("PHALANX", Set.of("RAGE")),
+            Map.entry("BERSERK", Set.of("WALL")),
+            Map.entry("WALL", Set.of("HERO")),
+            Map.entry("HERO", Set.of("SACRIFICE")),
+            Map.entry("KILL_COMMANDER", Set.of("HERO")),
+            Map.entry("TOTAL_ATTACK", Set.of("RETREAT")),
+            Map.entry("RETREAT", Set.of("SACRIFICE")),
+            Map.entry("WONDER", Set.of("TOTAL_ATTACK")),
+            Map.entry("SACRIFICE", Set.of("WONDER"))
+    );
 
     private final String configuredToken;
     private final String botUsername;
@@ -287,10 +336,16 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
             if (timeout) {
                 if (!attackerReady) {
-                    gameDao.setBattleAction(b.id(), true, "ATTACK");
+                    String aDefault = gameDao.findPlayerById(b.attackerId())
+                            .map(p -> defaultActionForRound(b.currentRound(), p.faction()))
+                            .orElse("SCOUT");
+                    gameDao.setBattleAction(b.id(), true, aDefault);
                 }
                 if (!defenderReady) {
-                    gameDao.setBattleAction(b.id(), false, "ATTACK");
+                    String dDefault = gameDao.findPlayerById(b.defenderId())
+                            .map(p -> defaultActionForRound(b.currentRound(), p.faction()))
+                            .orElse("SCOUT");
+                    gameDao.setBattleAction(b.id(), false, dDefault);
                 }
                 processBattleRound(b.id());
             } else if (attackerReady && defenderReady) {
@@ -1135,15 +1190,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                     "✅ Регистрация завершена!\n\n" +
                             "Деревня: " + player.villageName() + "\n" +
                             "Фракция: " + faction.getTitle() + "\n" +
-                            "\nДОСТУПНЫЕ РЕСУРСЫ:\n" +
-                            "🪵 Дерево: 200\n" +
-                            "🪨 Камень: 150\n" +
-                            "🌾 Еда: 200\n" +
-                            "⚔️ Железо: 0\n" +
-                            "💰 Золото: 50\n" +
-                            "🧪 Манна: 0\n" +
-                            "🍺 Алкоголь: 0\n\n" +
-                            "Используй /город чтобы строить и развиваться\n\n" +
+                            "\n" +
                             factionFinalMessage(faction),
                     menuService.mainMenu());
             return;
@@ -1462,13 +1509,13 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private String factionFinalMessage(Faction faction) {
         return "ДОСТУПНЫЕ РЕСУРСЫ:\n" +
-                "🪵 Дерево: 200\n" +
-                "🪨 Камень: 150\n" +
-                "🌾 Еда: 200\n" +
-                "⚔️ Железо: 0\n" +
-                "💰 Золото: 50\n" +
-                "🧪 Манна: 0\n" +
-                "🍺 Алкоголь: 0\n\n" +
+                "🪵 Дерево: 15000\n" +
+                "🪨 Камень: 12000\n" +
+                "🌾 Еда: 18000\n" +
+                "⚔️ Железо: 8000\n" +
+                "💰 Золото: 5000\n" +
+                "🧪 Манна: 2000\n" +
+                "🍺 Алкоголь: 1000\n\n" +
                 "Используй /город чтобы строить и развиваться";
     }
 
@@ -1916,14 +1963,19 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 sendText(chatId, "⚠️ У тебя нет армии! Сначала построй Казарму и найми воинов.");
                 return;
             }
+            long attackCdLeft = attackCooldownRemaining(attacker.id());
+            if (attackCdLeft > 0) {
+                sendText(chatId, "⏳ Атака на перезарядке: " + (attackCdLeft / 60_000L) + " мин " + ((attackCdLeft / 1000L) % 60L) + " сек.");
+                return;
+            }
             int aHp = Math.max(1, aPow * 10);
             double defenseBonus = 1.20;
             if (activeDailyEvent() == DailyEventType.PEACE_DAY) {
                 defenseBonus *= 1.15;
             }
             int dHp = Math.max(1, (int) Math.floor(dPow * 10 * defenseBonus));
-            int rounds = ThreadLocalRandom.current().nextInt(5, 8);
-            long battleId = gameDao.createBattle(attacker.id(), defender.id(), aHp, dHp, rounds, "WAITING_CHALLENGE");
+            long battleId = gameDao.createBattle(attacker.id(), defender.id(), aHp, dHp, BATTLE_ROUNDS, "WAITING_CHALLENGE");
+            applyAttackCooldown(attacker.id());
 
             double holdChance = 100.0 - baseAttackChance(attacker, defender);
             sendText(defender.telegramId(),
@@ -1969,6 +2021,12 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             Optional<PlayerRecord> def = gameDao.findPlayerById(defId);
             if (def.isEmpty()) return;
             PlayerRecord defender = def.get();
+            long attackCdLeft = attackCooldownRemaining(attacker.id());
+            if (attackCdLeft > 0) {
+                sendText(chatId, "⏳ Атака на перезарядке: " + (attackCdLeft / 60_000L) + " мин " + ((attackCdLeft / 1000L) % 60L) + " сек.");
+                return;
+            }
+            applyAttackCooldown(attacker.id());
             long battleId = gameDao.createBattle(attacker.id(), defender.id(), 1, 1, 1, "WAITING_CHALLENGE");
             resolveQuickRaid(battleId, attacker, defender, false, item);
         }
@@ -1997,9 +2055,11 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
         if ("accept".equals(p[1])) {
-            gameDao.setBattleStatus(b.id(), "WAITING_TACTICS");
-            sendText(defender.get().telegramId(), "✅ Бой принят. Выбери тактику:", tacticsKeyboard(b.id()));
-            sendText(attacker.get().telegramId(), "✅ " + defender.get().villageName() + " принял вызов. Выбери тактику:", tacticsKeyboard(b.id()));
+            gameDao.setBattleStatus(b.id(), "WAITING_ACTIONS");
+            gameDao.startBattleRound(b.id(), 1, Instant.now().toEpochMilli());
+            sendText(defender.get().telegramId(), "✅ Бой принят. Начинаем 5-раундовый бой тактик!");
+            sendText(attacker.get().telegramId(), "✅ " + defender.get().villageName() + " принял вызов. Начинаем 5-раундовый бой тактик!");
+            sendRoundPrompt(b.id());
             return;
         }
         if ("decline".equals(p[1])) {
@@ -2026,50 +2086,17 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
 
-        if ("tactic".equals(p[1]) && p.length >= 4) {
-            Tactics tactic = Tactics.fromKey(p[3]);
-            if (tactic != Tactics.NONE && !gameDao.spendResources(player.id(), tactic.cost())) {
-                sendText(chatId, "Недостаточно ресурсов для тактики: " + tactic.title());
-                return;
-            }
-            if (attackerSide) {
-                attackerTacticsByBattle.put(battleId, tactic);
-            } else {
-                defenderTacticsByBattle.put(battleId, tactic);
-            }
-            sendText(chatId, "✅ Тактика выбрана: " + tactic.title());
-
-            Tactics aT = attackerTacticsByBattle.get(battleId);
-            Tactics dT = defenderTacticsByBattle.get(battleId);
-            if (aT != null && dT != null) {
-                executeStrategicBattle(battleId);
-            } else {
-                sendText(chatId, "⏳ Ожидаем выбор тактики соперника...");
-            }
-            return;
-        }
-
         if (!"WAITING_ACTIONS".equals(b.status()) || b.currentRound() <= 0) {
             sendText(chatId, "Этот бой уже завершён/не активен");
             return;
         }
 
-        String action = p[3];
-        if ("ITEM".equals(action)) {
-            List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-            if (gameDao.hasInventoryItem(player.id(), "BLUEPRINT_PISTOL")) {
-                rows.add(List.of(btn("🔫 Пистолет", "battle:item:" + battleId + ":PISTOL")));
-            }
-            if (gameDao.hasInventoryItem(player.id(), "BLUEPRINT_CANNON")) {
-                rows.add(List.of(btn("💣 Пушка", "battle:item:" + battleId + ":CANNON")));
-            }
-            rows.add(List.of(btn("◀️ Назад", "battle:act:" + battleId + ":ATTACK")));
-            sendText(chatId, "Выбери предмет для хода:", InlineKeyboardMarkup.builder().keyboard(rows).build());
+        Faction playerFaction = player.faction();
+        List<String> available = roundActions(b.currentRound(), playerFaction);
+        String action = p[3].toUpperCase();
+        if (!available.contains(action)) {
+            sendText(chatId, "Эта тактика недоступна в текущем раунде.");
             return;
-        }
-
-        if ("item".equals(p[1]) && p.length >= 4) {
-            action = "ITEM_" + p[3];
         }
 
         if ("RETREAT".equals(action)) {
@@ -2100,6 +2127,26 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
 
+        if ("HERO".equals(action)) {
+            long remaining = actionCooldownRemaining(player.id(), STATE_HERO_CD_UNTIL);
+            if (remaining > 0) {
+                sendText(chatId, "⏳ Герой восстанавливается: " + (remaining / 60_000L) + " мин " + ((remaining / 1000L) % 60L) + " сек.");
+                return;
+            }
+            long heroCdMs = ThreadLocalRandom.current().nextLong(20L, 121L) * 60_000L;
+            applyActionCooldown(player.id(), STATE_HERO_CD_UNTIL, heroCdMs);
+        }
+        String unique = UNIQUE_TACTIC_BY_FACTION.get(playerFaction);
+        if (unique != null && unique.equals(action)) {
+            String key = "UNIQUE_CD_UNTIL_" + playerFaction.name();
+            long remaining = actionCooldownRemaining(player.id(), key);
+            if (remaining > 0) {
+                sendText(chatId, "⏳ Уникальная тактика на перезарядке: " + (remaining / 60_000L) + " мин " + ((remaining / 1000L) % 60L) + " сек.");
+                return;
+            }
+            applyActionCooldown(player.id(), key, UNIQUE_TACTIC_COOLDOWN_MS);
+        }
+
         if (attackerSide) {
             gameDao.setBattleAction(b.id(), true, action);
         } else {
@@ -2123,8 +2170,8 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
         String textA = roundPromptText(b, a.get().villageName(), d.get().villageName(), b.attackerHp(), b.attackerMaxHp(), b.defenderHp(), b.defenderMaxHp());
         String textD = roundPromptText(b, d.get().villageName(), a.get().villageName(), b.defenderHp(), b.defenderMaxHp(), b.attackerHp(), b.attackerMaxHp());
-        sendText(a.get().telegramId(), textA, battleActionsKeyboard(battleId, a.get().id()));
-        sendText(d.get().telegramId(), textD, battleActionsKeyboard(battleId, d.get().id()));
+        sendText(a.get().telegramId(), textA, battleActionsKeyboard(battleId, a.get(), b.currentRound()));
+        sendText(d.get().telegramId(), textD, battleActionsKeyboard(battleId, d.get(), b.currentRound()));
     }
 
     private String roundPromptText(BattleRecord b, String me, String enemy, int myHp, int myMax, int enemyHp, int enemyMax) {
@@ -2132,18 +2179,83 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 me + ": ❤️ " + myHp + " / " + myMax + "\n" +
                 enemy + ": ❤️ " + enemyHp + " / " + enemyMax + "\n" +
                 "━━━━━━━━━━━━━━━\n" +
-                "💡 ⚔️ бьёт 🏹 | 🏹 бьёт 🛡️ | 🛡️ бьёт ⚔️\n" +
+                "Выбери 1 из 4 тактик текущего раунда.\n" +
                 "⏱ Время на ход: 60 секунд\nТвой ход:";
     }
 
-    private InlineKeyboardMarkup battleActionsKeyboard(long battleId, long playerId) {
+    private InlineKeyboardMarkup battleActionsKeyboard(long battleId, PlayerRecord player, int round) {
+        List<String> actions = roundActions(round, player.faction());
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-        rows.add(List.of(btn("⚔️ Атака", "battle:act:" + battleId + ":ATTACK"), btn("🛡️ Защита", "battle:act:" + battleId + ":DEFEND")));
-        rows.add(List.of(btn("🏹 Обстрел", "battle:act:" + battleId + ":BARRAGE"), btn("🏃 Отступить", "battle:act:" + battleId + ":RETREAT")));
-        if (gameDao.hasInventoryItem(playerId, "BLUEPRINT_PISTOL") || gameDao.hasInventoryItem(playerId, "BLUEPRINT_CANNON")) {
-            rows.add(List.of(btn("🍺 Использовать предмет", "battle:act:" + battleId + ":ITEM")));
-        }
+        rows.add(List.of(btn(actionLabel(actions.get(0)), "battle:act:" + battleId + ":" + actions.get(0))));
+        rows.add(List.of(btn(actionLabel(actions.get(1)), "battle:act:" + battleId + ":" + actions.get(1))));
+        rows.add(List.of(btn(actionLabel(actions.get(2)), "battle:act:" + battleId + ":" + actions.get(2))));
+        rows.add(List.of(btn(actionLabel(actions.get(3)), "battle:act:" + battleId + ":" + actions.get(3))));
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private List<String> roundActions(int round, Faction faction) {
+        List<String> base = switch (round) {
+            case 1 -> new ArrayList<>(List.of("SCOUT", "AMBUSH", "DEFENSE", "RETREAT"));
+            case 2 -> new ArrayList<>(List.of("RAGE", "PHALANX", "TOTAL_ATTACK", "FEINT"));
+            case 3 -> new ArrayList<>(List.of("ARSON", "TURTLE", "DISPERSE", "BERSERK"));
+            case 4 -> new ArrayList<>(List.of("SNIPER", "HERO", "SACRIFICE", "WALL"));
+            case 5 -> new ArrayList<>(List.of("KILL_COMMANDER", "WONDER", "RETREAT", "TOTAL_ATTACK"));
+            default -> new ArrayList<>(List.of("SCOUT", "DEFENSE", "TOTAL_ATTACK", "RETREAT"));
+        };
+        String unique = UNIQUE_TACTIC_BY_FACTION.get(faction);
+        Integer uniqueRound = UNIQUE_TACTIC_ROUND.get(faction);
+        if (unique != null && uniqueRound != null && uniqueRound == round) {
+            base.set(2, unique);
+        }
+        return base;
+    }
+
+    private String defaultActionForRound(int round, Faction faction) {
+        return roundActions(round, faction).get(0);
+    }
+
+    private boolean isFavoriteTactic(Faction faction, String action) {
+        return FAVORITE_TACTICS.getOrDefault(faction, Set.of()).contains(action);
+    }
+
+    private double raceCounterMultiplier(Faction attackerFaction, Faction defenderFaction) {
+        if (attackerFaction == Faction.SAMURAI && defenderFaction == Faction.MONGOLS) return 1.35;
+        if (attackerFaction == Faction.MONGOLS && defenderFaction == Faction.KNIGHTS) return 1.50;
+        if (attackerFaction == Faction.KNIGHTS && defenderFaction == Faction.VIKINGS) return 1.40;
+        if (attackerFaction == Faction.VIKINGS && defenderFaction == Faction.SAMURAI) return 1.35;
+        if (attackerFaction == Faction.DESERT_DWELLERS && defenderFaction == Faction.AZTECS) return 1.30;
+        if (attackerFaction == Faction.AZTECS && defenderFaction == Faction.DESERT_DWELLERS) return 1.50;
+        return 1.0;
+    }
+
+    private boolean noCooldown(long playerId) {
+        return gameDao.getPlayerState(playerId, "NO_COOLDOWN") != null;
+    }
+
+    private void applyActionCooldown(long playerId, String stateKey, long durationMs) {
+        if (noCooldown(playerId)) {
+            return;
+        }
+        gameDao.setPlayerState(playerId, stateKey, System.currentTimeMillis() + durationMs);
+    }
+
+    private long actionCooldownRemaining(long playerId, String stateKey) {
+        if (noCooldown(playerId)) {
+            return 0L;
+        }
+        Long until = gameDao.getPlayerState(playerId, stateKey);
+        if (until == null) {
+            return 0L;
+        }
+        return Math.max(0L, until - System.currentTimeMillis());
+    }
+
+    private void applyAttackCooldown(long playerId) {
+        applyActionCooldown(playerId, STATE_ATTACK_CD_UNTIL, ATTACK_COOLDOWN_MS);
+    }
+
+    private long attackCooldownRemaining(long playerId) {
+        return actionCooldownRemaining(playerId, STATE_ATTACK_CD_UNTIL);
     }
 
     private InlineKeyboardMarkup tacticsKeyboard(long battleId) {
@@ -2297,15 +2409,33 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             gameDao.removeInventoryItem(d.id(), "BLUEPRINT_CANNON", 1);
         }
 
-        double dmgToD = baseDamage(aPower, aAct, a.hasCrossbow());
-        double dmgToA = baseDamage(dPower, dAct, d.hasCrossbow());
+        int round = b.currentRound();
+        double dmgToD = baseDamage(aPower, aAct, round, a, d);
+        double dmgToA = baseDamage(dPower, dAct, round, d, a);
 
         double[] duel = duelMultipliers(aAct, dAct);
         dmgToD *= duel[0];
         dmgToA *= duel[1];
 
-        double defMulA = defenseMultiplier(dAct, aAct, a, false);
-        double defMulD = defenseMultiplier(aAct, dAct, d, true);
+        double defMulA = defenseMultiplier(dAct, aAct, a, false, round);
+        double defMulD = defenseMultiplier(aAct, dAct, d, true, round);
+
+        if (round == 3 && ("KN_IMPREGNABILITY".equals(aAct) || "KN_IMPREGNABILITY".equals(dAct))) {
+            dmgToD = 0;
+            dmgToA = 0;
+        }
+        if (round == 4 && "SM_IAIDO".equals(aAct) && ThreadLocalRandom.current().nextDouble() < 0.30) {
+            dHp = Math.max(0, dHp - 200);
+        }
+        if (round == 4 && "SM_IAIDO".equals(dAct) && ThreadLocalRandom.current().nextDouble() < 0.30) {
+            aHp = Math.max(0, aHp - 200);
+        }
+        if ("KILL_COMMANDER".equals(aAct) && "HERO".equals(dAct) && ThreadLocalRandom.current().nextDouble() < 0.50) {
+            dHp = Math.max(0, dHp - 250);
+        }
+        if ("KILL_COMMANDER".equals(dAct) && "HERO".equals(aAct) && ThreadLocalRandom.current().nextDouble() < 0.50) {
+            aHp = Math.max(0, aHp - 250);
+        }
 
         dHp -= (int) Math.floor(dmgToD * defMulD);
         aHp -= (int) Math.floor(dmgToA * defMulA);
@@ -2372,22 +2502,71 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         sendText(defender.telegramId(), defenderText);
     }
 
-    private double baseDamage(int power, String action, boolean crossbowEquipped) {
-        return switch (action) {
-            case "ATTACK" -> power * 0.20;
-            case "BARRAGE" -> power * (crossbowEquipped ? 0.18 : 0.15);
-            case "ITEM_PISTOL" -> power * 0.26;
-            default -> 0.0;
+    private double baseDamage(int power, String action, int round, PlayerRecord me, PlayerRecord enemy) {
+        double base = switch (action) {
+            case "SCOUT" -> 0.14;
+            case "AMBUSH" -> 0.22;
+            case "RAGE" -> 0.26;
+            case "TOTAL_ATTACK" -> 0.30;
+            case "DEFENSE" -> 0.08;
+            case "PHALANX" -> 0.14;
+            case "FEINT" -> 0.16;
+            case "ARSON" -> 0.20;
+            case "TURTLE" -> 0.06;
+            case "DISPERSE" -> 0.12;
+            case "SNIPER" -> 0.22;
+            case "HERO" -> 0.24;
+            case "SACRIFICE" -> 0.28;
+            case "WALL" -> 0.10;
+            case "BERSERK" -> 0.27;
+            case "KILL_COMMANDER" -> 0.20;
+            case "WONDER" -> 0.15;
+            case "RETREAT" -> 0.00;
+            case "KN_IMPREGNABILITY" -> 0.10;
+            case "SM_IAIDO" -> 0.24;
+            case "VK_VALHALLA" -> 0.26;
+            case "MG_STEPPE_WIND" -> 0.24;
+            case "DS_MIRAGE" -> 0.18;
+            case "AZ_BLOOD_SUN" -> 0.22;
+            default -> 0.10;
         };
+        double damage = power * base;
+
+        if (isFavoriteTactic(me.faction(), action)) {
+            damage *= 1.20;
+        }
+        damage *= raceCounterMultiplier(me.faction(), enemy.faction());
+
+        if ("MG_STEPPE_WIND".equals(action) && round == 2) {
+            damage *= 2.0;
+        }
+        if ("VK_VALHALLA".equals(action) && round == 5) {
+            double lostPct = (me.hasArmor() ? 0.0 : Math.max(0.0, (me.cityLevel() / 20.0)));
+            damage *= (1.30 + lostPct);
+        }
+        if ("AZ_BLOOD_SUN".equals(action) && round == 4) {
+            damage *= 1.30;
+        }
+
+        return damage;
     }
 
-    private double defenseMultiplier(String myAction, String enemyAction, PlayerRecord me, boolean defenderSide) {
+    private double defenseMultiplier(String myAction, String enemyAction, PlayerRecord me, boolean defenderSide, int round) {
         double m = 1.0;
-        if ("DEFEND".equals(myAction)) {
+        if ("DEFENSE".equals(myAction) || "WALL".equals(myAction) || "PHALANX".equals(myAction)) {
             m *= 0.5;
         }
-        if ("ITEM_CANNON".equals(myAction)) {
+        if ("TURTLE".equals(myAction)) {
             m *= 0.3;
+        }
+        if ("DS_MIRAGE".equals(myAction) && round == 1) {
+            m *= 0.4;
+        }
+        if ("AZ_BLOOD_SUN".equals(enemyAction) && round == 4) {
+            m *= 1.3;
+        }
+        if ("HERO".equals(enemyAction) && "WALL".equals(myAction)) {
+            m *= 0.5;
         }
         double armorBonus = armorBonus(me.equippedArmor());
         if (armorBonus > 0) {
@@ -2406,27 +2585,20 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return new double[]{1.0, 1.0};
         }
         if (beats(aNorm, dNorm)) {
-            return new double[]{1.3, 0.7};
+            return new double[]{1.35, 0.70};
         }
         if (beats(dNorm, aNorm)) {
-            return new double[]{0.7, 1.3};
+            return new double[]{0.70, 1.35};
         }
         return new double[]{1.0, 1.0};
     }
 
     private boolean beats(String left, String right) {
-        return ("ATTACK".equals(left) && "BARRAGE".equals(right))
-                || ("BARRAGE".equals(left) && "DEFEND".equals(right))
-                || ("DEFEND".equals(left) && "ATTACK".equals(right));
+        return TACTIC_COUNTERS.getOrDefault(left, Set.of()).contains(right);
     }
 
     private String normalizeActionForDuel(String action) {
-        if (action == null) return "";
-        return switch (action) {
-            case "ITEM_PISTOL" -> "ATTACK";
-            case "ITEM_CANNON" -> "DEFEND";
-            default -> action;
-        };
+        return action == null ? "" : action.toUpperCase();
     }
 
     private void finishBattleAndReward(long battleId, PlayerRecord a, PlayerRecord d, int aHp, int dHp) {
@@ -3767,11 +3939,30 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private String actionLabel(String action) {
         return switch (action) {
-            case "ATTACK" -> "⚔️ Атака";
-            case "DEFEND" -> "🛡️ Защита";
-            case "BARRAGE" -> "🏹 Обстрел";
-            case "ITEM_PISTOL" -> "🔫 Пистолет";
-            case "ITEM_CANNON" -> "💣 Пушка";
+            case "SCOUT" -> "🕵️ Разведка";
+            case "AMBUSH" -> "🏹 Засада";
+            case "RAGE" -> "😡 Яростная атака";
+            case "TOTAL_ATTACK" -> "⚔️ Тотальная атака";
+            case "DEFENSE" -> "🛡️ Оборона";
+            case "FEINT" -> "🎭 Фальшивка";
+            case "ARSON" -> "🔥 Зажигательные";
+            case "TURTLE" -> "🐢 Черепаха";
+            case "DISPERSE" -> "💨 Рассредоточиться";
+            case "SNIPER" -> "🎯 Снайпер";
+            case "HERO" -> "👑 Герой";
+            case "SACRIFICE" -> "🩸 Жертва";
+            case "PHALANX" -> "🛡️ Фаланга";
+            case "BERSERK" -> "🪓 Берсерк";
+            case "WALL" -> "🧱 Стенка";
+            case "KILL_COMMANDER" -> "☠️ Убить командира";
+            case "RETREAT" -> "🏃 Отступление";
+            case "WONDER" -> "✨ Чудо";
+            case "KN_IMPREGNABILITY" -> "🛡️ Несокрушимость";
+            case "SM_IAIDO" -> "⚔️ Иайдо";
+            case "VK_VALHALLA" -> "🪓 Вальгалла";
+            case "MG_STEPPE_WIND" -> "🏹 Степной ветер";
+            case "DS_MIRAGE" -> "🏜️ Мираж";
+            case "AZ_BLOOD_SUN" -> "🌞 Кровавое солнце";
             default -> action;
         };
     }

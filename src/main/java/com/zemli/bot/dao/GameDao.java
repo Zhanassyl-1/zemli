@@ -142,7 +142,7 @@ public class GameDao {
         jdbcTemplate.update(
                 """
                 INSERT INTO resources(player_id, wood, stone, food, iron, gold, mana, alcohol)
-                VALUES (?, 200, 150, 200, 0, 50, 0, 0)
+                VALUES (?, 15000, 12000, 18000, 8000, 5000, 2000, 1000)
                 """,
                 created.id()
         );
