@@ -82,34 +82,46 @@ public class GameCatalog {
         ));
 
         unitsByFaction.put(Faction.KNIGHTS, List.of(
-                new UnitSpec("SWORDSMAN", "Мечник", 1, "BARRACKS", new Cost(0, 0, 20, 0, 10, 0, 0), 5),
-                new UnitSpec("CROSSBOWMAN", "Арбалетчик", 2, "RANGE", new Cost(0, 0, 30, 10, 20, 0, 0), 12),
-                new UnitSpec("PALADIN", "Паладин", 3, "STABLE", new Cost(0, 0, 50, 20, 40, 0, 0), 25)
+                new UnitSpec("KN_MILITIA", "Ополченец", 1, "BARRACKS", new Cost(20, 10, 10, 5, 5, 0, 0), 10),
+                new UnitSpec("KN_CROSSBOW", "Арбалетчик", 2, "RANGE", new Cost(40, 20, 10, 15, 10, 0, 0), 20),
+                new UnitSpec("KN_SWORDSMAN", "Мечник", 3, "BARRACKS", new Cost(30, 40, 15, 30, 15, 0, 0), 35),
+                new UnitSpec("KN_HEAVY_KNIGHT", "Тяжелый рыцарь", 4, "STABLE", new Cost(50, 60, 30, 50, 30, 0, 0), 60),
+                new UnitSpec("KN_PALADIN", "Паладин", 5, "TEMPLE", new Cost(100, 120, 50, 100, 50, 20, 0), 100)
         ));
         unitsByFaction.put(Faction.SAMURAI, List.of(
-                new UnitSpec("ASHIGARU", "Асигару", 1, "BARRACKS", new Cost(0, 0, 15, 0, 8, 0, 0), 5),
-                new UnitSpec("SAM_ARCHER", "Лучник", 2, "RANGE", new Cost(0, 0, 25, 8, 15, 0, 0), 12),
-                new UnitSpec("SAMURAI", "Самурай", 3, "STABLE", new Cost(0, 0, 45, 15, 35, 0, 0), 25)
+                new UnitSpec("SM_ASHIGARU", "Асигару", 1, "BARRACKS", new Cost(15, 5, 15, 10, 5, 0, 0), 12),
+                new UnitSpec("SM_ARCHER", "Лучник", 2, "RANGE", new Cost(30, 10, 10, 15, 10, 0, 0), 18),
+                new UnitSpec("SM_KATANA", "Самурай с катаной", 3, "BARRACKS", new Cost(30, 20, 20, 40, 20, 0, 0), 40),
+                new UnitSpec("SM_NINJA", "Ниндзя", 4, "STABLE", new Cost(20, 10, 15, 30, 40, 0, 10), 45),
+                new UnitSpec("SM_KENDO", "Кендо-мастер", 5, "TEMPLE", new Cost(60, 40, 40, 80, 50, 20, 0), 85)
         ));
         unitsByFaction.put(Faction.VIKINGS, List.of(
-                new UnitSpec("BERSERK", "Берсерк", 1, "BARRACKS", new Cost(0, 0, 20, 0, 12, 0, 0), 6),
-                new UnitSpec("VIK_ARCHER", "Лучник", 2, "RANGE", new Cost(0, 0, 30, 10, 20, 0, 0), 13),
-                new UnitSpec("JARL", "Ярл", 3, "STABLE", new Cost(0, 0, 55, 20, 45, 0, 0), 28)
+                new UnitSpec("VK_THRALL", "Трэлл", 1, "BARRACKS", new Cost(10, 5, 20, 5, 5, 0, 0), 10),
+                new UnitSpec("VK_AXE_THROWER", "Метатель топора", 2, "RANGE", new Cost(30, 10, 15, 20, 10, 0, 5), 25),
+                new UnitSpec("VK_BERSERK", "Берсерк", 3, "BARRACKS", new Cost(20, 15, 30, 30, 15, 0, 15), 50),
+                new UnitSpec("VK_HIRDMANN", "Хирдманн", 4, "STABLE", new Cost(40, 30, 25, 40, 20, 0, 0), 45),
+                new UnitSpec("VK_JARL", "Ярл", 5, "TEMPLE", new Cost(60, 50, 60, 70, 40, 10, 30), 90)
         ));
         unitsByFaction.put(Faction.MONGOLS, List.of(
-                new UnitSpec("MONGOL_ARCHER", "Лучник", 1, "BARRACKS", new Cost(0, 0, 18, 0, 10, 0, 0), 5),
-                new UnitSpec("RIDER", "Всадник", 2, "RANGE", new Cost(0, 0, 35, 12, 25, 0, 0), 15),
-                new UnitSpec("KHAN", "Хан", 3, "STABLE", new Cost(0, 0, 60, 25, 50, 0, 0), 30)
+                new UnitSpec("MG_HERDER", "Скотовод", 1, "BARRACKS", new Cost(20, 5, 25, 5, 5, 0, 0), 12),
+                new UnitSpec("MG_HORSE_ARCHER", "Конный лучник", 2, "RANGE", new Cost(40, 10, 30, 15, 15, 0, 0), 28),
+                new UnitSpec("MG_BAGATUR", "Багатур", 3, "BARRACKS", new Cost(30, 20, 20, 30, 20, 0, 0), 40),
+                new UnitSpec("MG_NOYON", "Нойон", 4, "STABLE", new Cost(50, 30, 30, 40, 30, 10, 0), 55),
+                new UnitSpec("MG_CHINGIZID", "Чингизид", 5, "TEMPLE", new Cost(80, 50, 50, 80, 60, 20, 0), 95)
         ));
         unitsByFaction.put(Faction.DESERT_DWELLERS, List.of(
-                new UnitSpec("SPEARMAN", "Копейщик", 1, "BARRACKS", new Cost(0, 0, 15, 0, 8, 0, 0), 5),
-                new UnitSpec("DES_ARCHER", "Лучник", 2, "RANGE", new Cost(0, 0, 25, 8, 15, 0, 0), 11),
-                new UnitSpec("MAMLUK", "Мамлюк", 3, "STABLE", new Cost(0, 0, 45, 18, 35, 0, 0), 24)
+                new UnitSpec("DS_DRIVER", "Погонщик", 1, "BARRACKS", new Cost(15, 10, 15, 5, 10, 0, 0), 15),
+                new UnitSpec("DS_JANISSARY", "Янычар", 2, "RANGE", new Cost(30, 10, 15, 20, 15, 0, 0), 25),
+                new UnitSpec("DS_MAMLUK", "Мамлюк", 3, "BARRACKS", new Cost(40, 30, 20, 35, 25, 0, 0), 45),
+                new UnitSpec("DS_ASSASSIN", "Ассасин", 4, "STABLE", new Cost(20, 10, 10, 30, 40, 20, 0), 50),
+                new UnitSpec("DS_SULTAN", "Султан", 5, "TEMPLE", new Cost(70, 60, 40, 70, 80, 30, 0), 90)
         ));
         unitsByFaction.put(Faction.AZTECS, List.of(
-                new UnitSpec("WARRIOR", "Воин", 1, "BARRACKS", new Cost(0, 0, 18, 0, 10, 0, 0), 5),
-                new UnitSpec("JAGUAR", "Ягуар", 2, "RANGE", new Cost(0, 0, 30, 0, 20, 10, 0), 14),
-                new UnitSpec("PRIEST", "Жрец-воин", 3, "STABLE", new Cost(0, 0, 50, 0, 40, 20, 0), 27)
+                new UnitSpec("AZ_MASEUALLI", "Масеуалли", 1, "BARRACKS", new Cost(20, 10, 20, 5, 5, 0, 0), 12),
+                new UnitSpec("AZ_WAR_ARCHER", "Лучник-воин", 2, "RANGE", new Cost(30, 10, 15, 10, 10, 0, 0), 20),
+                new UnitSpec("AZ_JAGUAR", "Ягуар", 3, "BARRACKS", new Cost(30, 15, 25, 25, 15, 10, 0), 40),
+                new UnitSpec("AZ_EAGLE", "Орел", 4, "STABLE", new Cost(20, 10, 20, 20, 20, 20, 0), 45),
+                new UnitSpec("AZ_PRIEST", "Жрец", 5, "TEMPLE", new Cost(40, 30, 30, 30, 30, 50, 0), 70)
         ));
     }
 
@@ -131,7 +143,7 @@ public class GameCatalog {
 
     public int maxBuildingLevel(String buildingKey) {
         if ("TOWN_HALL".equals(buildingKey)) {
-            return 7;
+            return 10;
         }
         return 3;
     }
@@ -144,6 +156,9 @@ public class GameCatalog {
             case 5 -> "Эпические события";
             case 6 -> "Дипломатия";
             case 7 -> "Мировое доминирование";
+            case 8 -> "Имперские реформы";
+            case 9 -> "Легендарный герой";
+            case 10 -> "Уникальная способность державы";
             default -> "Новые возможности";
         };
     }
@@ -170,22 +185,22 @@ public class GameCatalog {
     public String shortFactionLabel(Faction faction) {
         return switch (faction) {
             case KNIGHTS -> "⚔️ Рыцари — броня, сильны против лучников";
-            case SAMURAI -> "🥷 Самураи — мастера ближнего боя";
+            case SAMURAI -> "⚔️ Самураи — мастера клинка и скорости";
             case VIKINGS -> "🪓 Викинги — ярость и море";
             case MONGOLS -> "🏹 Монголы — быстрые всадники степи";
-            case DESERT_DWELLERS -> "🐪 Пустынники — выносливые и дешёвые";
+            case DESERT_DWELLERS -> "🏜️ Пустынники — мираж и мобильность";
             case AZTECS -> "🗿 Ацтеки — магия и манна";
         };
     }
 
     public String fullFactionDescription(Faction faction) {
         return switch (faction) {
-            case KNIGHTS -> "⚔️ Рыцари\nЮниты: Мечник → Арбалетчик → Паладин\nБонус: броня +20% против лучников";
-            case SAMURAI -> "🥷 Самураи\nЮниты: Асигару → Лучник → Самурай\nБонус: ближний бой +15%";
-            case VIKINGS -> "🪓 Викинги\nЮниты: Берсерк → Лучник → Ярл\nБонус: море +25%, порт даёт двойных юнитов";
-            case MONGOLS -> "🏹 Монголы\nЮниты: Лучник → Всадник → Хан\nБонус в степи: шанс победы ×1.1, поражения ×0.9";
-            case DESERT_DWELLERS -> "🐪 Пустынники\nЮниты: Копейщик → Лучник → Мамлюк\nБонус в жаре/пустыне +15%";
-            case AZTECS -> "🗿 Ацтеки\nЮниты: Воин → Ягуар → Жрец-воин\nБонус: манна +20%, джунгли +15%";
+            case KNIGHTS -> "=== РЫЦАРИ ЗАПАДА ===\nБлагородные воины в тяжёлых доспехах. Медленные но непробиваемые.\n\nСИЛЬНЫЕ СТОРОНЫ:\n• Лучшая броня на сервере (+30% защиты в раунде 2)\n• Паладины - мощнейшие юниты\n• Бонус против Викингов (+40% защиты)\n• Идеальны для обороны\n\nСЛАБЫЕ СТОРОНЫ:\n• Очень медленные (кулдаун 12ч)\n• Уязвимы для обстрела монголов (-30%)\n• Дорогие юниты (требуют много железа)\n• Долгое восстановление\n\nПУТЬ ВОИНА:\nОполченец → Арбалетчик → Мечник → Тяжелый рыцарь → Паладин";
+            case SAMURAI -> "=== САМУРАИ ВОСТОКА ===\nДисциплина и мастерство клинка. Быстрые и смертельные.\n\nСИЛЬНЫЕ СТОРОНЫ:\n• Клинок смерти - 20% шанс убить врага мгновенно\n• Высокая скорость (6-7)\n• Бонус против Монголов (+25% уклонение от стрел)\n• Ниндзя - неуловимы\n\nСЛАБЫЕ СТОРОНЫ:\n• Слабая броня\n• Уязвимы для Викингов (-20% защиты)\n• Требуют много еды\n• Нет тяжелых юнитов\n\nПУТЬ ВОИНА:\nАсигару → Лучник → Самурай с катаной → Ниндзя → Кендо-мастер";
+            case VIKINGS -> "=== ВИКИНГИ СЕВЕРА ===\nЯрость и сила. Берсерки не знают страха.\n\nСИЛЬНЫЕ СТОРОНЫ:\n• Берсерк - чем меньше HP, тем сильнее атака (до +70%)\n• Вампиризм (восстанавливаются в бою)\n• Бонус против Самураев (+35% атаки)\n• Дешевые юниты\n\nСЛАБЫЕ СТОРОНЫ:\n• Нет тяжелой брони\n• Уязвимы для Рыцарей (-30% атаки)\n• Требуют много алкоголя\n• Недисциплинированные\n\nПУТЬ ВОИНА:\nТрэлл → Метатель топора → Берсерк → Хирдманн → Ярл";
+            case MONGOLS -> "=== МОНГОЛЫ СТЕПИ ===\nКонные лучники. Быстрее ветра.\n\nСИЛЬНЫЕ СТОРОНЫ:\n• Подвижность - могут убежать без потерь 1 раз в день\n• Самая высокая скорость (7)\n• Бонус против Рыцарей (+50% урона в обстреле)\n• Обстрел перед боем\n\nСЛАБЫЕ СТОРОНЫ:\n• Слабы в ближнем бою\n• Уязвимы для Самураев (-25% точности)\n• Требуют много дерева для стрел\n• Мало брони\n\nПУТЬ ВОИНА:\nСкотовод → Конный лучник → Багатур → Нойон → Чингизид";
+            case DESERT_DWELLERS -> "=== ПУСТЫННИКИ ВОСТОКА ===\nТаинственные воины песков. Торговцы и убийцы.\n\nСИЛЬНЫЕ СТОРОНЫ:\n• Мираж - 30% шанс увернуться от атаки\n• Ассасины убивают командиров\n• Бонус против Ацтеков (+30% морали)\n• Лучшие торговцы (+20% золота)\n\nСЛАБЫЕ СТОРОНЫ:\n• Медленные вне пустыни\n• Уязвимы для Викингов\n• Дорогие постройки\n• Требуют манну\n\nПУТЬ ВОИНА:\nПогонщик → Янычар → Мамлюк → Ассасин → Султан";
+            case AZTECS -> "=== АЦТЕКИ ДЖУНГЛЕЙ ===\nКровавые жертвы древним богам.\n\nСИЛЬНЫЕ СТОРОНЫ:\n• Жертва - убивают слабого, усиливая сильного (+50%)\n• Жрецы используют магию\n• Бонус против Пустынников (+50% за жертвы)\n• Получают силу от каждой смерти\n\nСЛАБЫЕ СТОРОНЫ:\n• Без жертв - штраф -20%\n• Уязвимы для Рыцарей (сталь против дерева)\n• Требуют много манны\n• Медленное развитие\n\nПУТЬ ВОИНА:\nМасеуалли → Лучник-воин → Ягуар → Орел → Жрец";
         };
     }
 

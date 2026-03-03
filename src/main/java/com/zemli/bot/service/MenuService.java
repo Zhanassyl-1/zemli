@@ -11,11 +11,10 @@ public class MenuService {
 
     public InlineKeyboardMarkup mainMenu() {
         return InlineKeyboardMarkup.builder()
-                .keyboardRow(List.of(button("📊 Мой город", "menu:city"), button("⚔️ Атаковать", "menu:attack")))
-                .keyboardRow(List.of(button("🏗️ Строить", "menu:build"), button("⚔️ Армия", "menu:army")))
-                .keyboardRow(List.of(button("⛏️ Добыть", "menu:mine"), button("🔨 Крафт", "menu:craft")))
-                .keyboardRow(List.of(button("🎒 Инвентарь", "menu:inventory"), button("🏦 Торговля", "menu:trade")))
-                .keyboardRow(List.of(button("🤝 Альянс", "menu:alliance")))
+                .keyboardRow(List.of(button("⚔️ ВОЙНА", "menu:attack"), button("🏰 ГОРОД", "menu:city")))
+                .keyboardRow(List.of(button("🛡️ АРМИЯ", "menu:army"), button("👑 ГЕРОИ", "menu:heroes")))
+                .keyboardRow(List.of(button("📊 ПРОФИЛЬ", "menu:profile"), button("🏗️ СТРОЙКА", "menu:build")))
+                .keyboardRow(List.of(button("⛏️ ДОБЫЧА", "menu:mine"), button("🏦 ТОРГОВЛЯ", "menu:trade")))
                 .build();
     }
 

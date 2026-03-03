@@ -17,20 +17,17 @@ import org.springframework.core.task.TaskExecutor;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
-import org.telegram.telegrambots.meta.api.methods.send.SendAnimation;
-import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
-import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
-import java.io.InputStream;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HashMap;
@@ -63,50 +60,23 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             "NETHERITE_ARMOR", 0.50
     );
     private static final List<String> RESOURCES = List.of("WOOD", "STONE", "FOOD", "IRON", "GOLD", "MANA", "ALCOHOL");
-    private static final String MAIN_MENU_COVER_URL = "https://i.imgur.com/8YqynEP.jpeg";
-    private static final String MAIN_MENU_COVER_CAPTION = "⚔️ ZEMLI — Завоюй мир";
-    private static final String WIN_GIF_URL = "https://i.imgur.com/victory_anime.gif";
-    private static final String LOSE_GIF_URL = "https://i.imgur.com/defeat_anime.gif";
-    private static final String LOOT_COMMON_GIF_URL = "https://i.imgur.com/common_find.gif";
-    private static final String LOOT_RARE_GIF_URL = "https://i.imgur.com/rare_find.gif";
-    private static final String LOOT_LEGENDARY_GIF_URL = "https://i.imgur.com/legendary_find.gif";
-    private static final String LOOT_ARMOR_GIF_URL = "https://i.imgur.com/rare_find.gif";
-    private static final String LEVEL_UP_GIF_URL = "https://i.imgur.com/levelup_city.gif";
-
-    private static final String MAIN_MENU_COVER_RESOURCE = "/images/menu.jpg";
-    private static final String BATTLE_WIN_RESOURCE = "/images/battle_win.gif";
-    private static final String BATTLE_LOSE_RESOURCE = "/images/battle_lose.gif";
-    private static final String LOOT_COMMON_RESOURCE = "/images/rare_find.gif";
-    private static final String LOOT_RARE_RESOURCE = "/images/rare_find.gif";
-    private static final String LOOT_LEGENDARY_RESOURCE = "/images/legendary_find.gif";
-    private static final String LOOT_ARMOR_RESOURCE = "/images/rare_find.gif";
-    private static final String LEVEL_UP_RESOURCE = "/images/levelup.gif";
+    // ВОТ СЮДА ВСТАВЬ СВОЙ ЮЗЕРНЕЙМ:
+    public static final List<String> ADMIN_USERNAMES = new ArrayList<>(Arrays.asList(
+            "твой_юзернейм",
+            "резервный_админ"
+    ));
+    private static final Map<String, String> HERO_ALIASES = Map.of(
+            "ланселот", "HERO_LANCELOT",
+            "артур", "HERO_ARTHUR",
+            "мусаси", "HERO_MUSASHI",
+            "рагнар", "HERO_RAGNAR",
+            "чингисхан", "HERO_GENGHIS",
+            "токугава", "HERO_TOKUGAWA",
+            "ривард", "HERO_RICHARD",
+            "ричард", "HERO_RICHARD"
+    );
     private static final List<Faction> FACTION_ORDER = List.of(
             Faction.KNIGHTS, Faction.SAMURAI, Faction.VIKINGS, Faction.MONGOLS, Faction.DESERT_DWELLERS, Faction.AZTECS
-    );
-    private static final Map<Faction, String> FACTION_IMAGES_PRIMARY = Map.of(
-            Faction.KNIGHTS, "https://i.imgur.com/KmP2vLd.jpeg",
-            Faction.SAMURAI, "https://i.imgur.com/vNqR8Xt.jpeg",
-            Faction.VIKINGS, "https://i.imgur.com/nJkL3Qp.jpeg",
-            Faction.MONGOLS, "https://i.imgur.com/WmX4kRs.jpeg",
-            Faction.DESERT_DWELLERS, "https://i.imgur.com/Lp9KmRt.jpeg",
-            Faction.AZTECS, "https://i.imgur.com/Tz8YqBn.jpeg"
-    );
-    private static final Map<Faction, String> FACTION_IMAGES_FALLBACK = Map.of(
-            Faction.KNIGHTS, "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Medieval_knight.jpg/400px-Medieval_knight.jpg",
-            Faction.SAMURAI, "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Shimazu_Yoshihiro.jpg/400px-Shimazu_Yoshihiro.jpg",
-            Faction.VIKINGS, "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Varangian_Guard_reenactors.jpg/400px-Varangian_Guard_reenactors.jpg",
-            Faction.MONGOLS, "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/YuanEmperorAlbumGenghisPortrait.jpg/400px-YuanEmperorAlbumGenghisPortrait.jpg",
-            Faction.DESERT_DWELLERS, "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Mamluk_warrior.jpg/400px-Mamluk_warrior.jpg",
-            Faction.AZTECS, "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Aztec_Warriors_Florentine_Codex.jpg/400px-Aztec_Warriors_Florentine_Codex.jpg"
-    );
-    private static final Map<Faction, String> FACTION_IMAGE_RESOURCES = Map.of(
-            Faction.KNIGHTS, "/images/faction_knights.jpg",
-            Faction.SAMURAI, "/images/faction_samurai.jpg",
-            Faction.VIKINGS, "/images/faction_vikings.jpg",
-            Faction.MONGOLS, "/images/faction_mongols.jpg",
-            Faction.DESERT_DWELLERS, "/images/faction_desert.jpg",
-            Faction.AZTECS, "/images/faction_aztec.jpg"
     );
 
     private final String configuredToken;
@@ -117,6 +87,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private final GameCatalog catalog;
     private final TaskExecutor taskExecutor;
     private final long groupChatId;
+    private final Set<Long> adminUserIds;
     private final ExecutorService groupExecutor = Executors.newSingleThreadExecutor();
     private final AtomicLong lastGroupMessageTs = new AtomicLong(0L);
     private final Map<Long, Long> lastBuildPostByPlayer = new ConcurrentHashMap<>();
@@ -133,7 +104,8 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             GameDao gameDao,
             GameCatalog catalog,
             TaskExecutor taskExecutor,
-            long groupChatId
+            long groupChatId,
+            String adminIdsRaw
     ) {
         super(botToken);
         this.configuredToken = botToken;
@@ -144,6 +116,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         this.catalog = catalog;
         this.taskExecutor = taskExecutor;
         this.groupChatId = groupChatId;
+        this.adminUserIds = parseAdminIds(adminIdsRaw);
     }
 
     private static class AllianceAttackSession {
@@ -421,6 +394,24 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
 
+        if (isPrivate && isAdminCommand(commandToken)) {
+            if (!isAdmin(message)) {
+                sendText(chatId, "У вас нет прав");
+                return;
+            }
+            if ("/admin".equalsIgnoreCase(commandToken)) {
+                showAdminMenu(
+                        chatId,
+                        message.getFrom() == null ? null : message.getFrom().getUserName(),
+                        message.getFrom() == null ? null : message.getFrom().getId()
+                );
+                return;
+            }
+            if (handleAdminCommand(message, tgId, chatId, text)) {
+                return;
+            }
+        }
+
         if ("/start".equalsIgnoreCase(commandToken)) {
             if (!isPrivate) {
                 sendText(chatId, "👋 Привет! Чтобы играть напиши мне в личку: @" + botUsername);
@@ -438,6 +429,15 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             sendText(chatId, "📋 Помощь\n/start — 🚀 Начать игру\n/help — 📋 Помощь");
             return;
         }
+        if ("/город".equalsIgnoreCase(commandToken) && isPrivate) {
+            Optional<PlayerRecord> p = registrationService.findRegistered(tgId);
+            if (p.isEmpty()) {
+                sendText(chatId, "Сначала зарегистрируйся через /start");
+                return;
+            }
+            showCityCompact(chatId, p.get());
+            return;
+        }
         if (!isPrivate) {
             return;
         }
@@ -451,6 +451,301 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
         sendText(chatId, "❌ Неизвестная команда");
+    }
+
+    private boolean handleAdminCommand(Message message, long tgId, long chatId, String text) {
+        String[] parts = text.trim().split("\\s+");
+        if (parts.length == 0) {
+            return false;
+        }
+        String cmd = parts[0].toLowerCase();
+        Optional<PlayerRecord> p = registrationService.findRegistered(tgId);
+        String username = message.getFrom() != null ? message.getFrom().getUserName() : "unknown";
+
+        switch (cmd) {
+            case "/on" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                gameDao.setPlayerState(p.get().id(), "TESTER_MODE", 1);
+                log.info("[ADMIN] @{} включил /on", username);
+                sendText(chatId, "✅ Режим тестировщика включен");
+                return true;
+            }
+            case "/off" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                gameDao.clearPlayerState(p.get().id(), "TESTER_MODE");
+                log.info("[ADMIN] @{} включил /off", username);
+                sendText(chatId, "✅ Режим тестировщика выключен");
+                return true;
+            }
+            case "/status" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                boolean tester = gameDao.getPlayerState(p.get().id(), "TESTER_MODE") != null;
+                boolean god = gameDao.getPlayerState(p.get().id(), "GOD_MODE") != null;
+                log.info("[ADMIN] @{} использовал /status", username);
+                sendText(chatId, "🔧 Статус\nТестер: " + (tester ? "ON" : "OFF") + "\nGod: " + (god ? "ON" : "OFF"));
+                return true;
+            }
+            case "/god" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                if (!isTesterModeEnabled(p.get().id())) {
+                    sendText(chatId, "Сначала включи режим тестировщика: /on");
+                    return true;
+                }
+                Long state = gameDao.getPlayerState(p.get().id(), "GOD_MODE");
+                if (state == null) {
+                    gameDao.setPlayerState(p.get().id(), "GOD_MODE", 1);
+                    log.info("[ADMIN] @{} включил /god режим", username);
+                    sendText(chatId, "✅ GOD режим включен");
+                } else {
+                    gameDao.clearPlayerState(p.get().id(), "GOD_MODE");
+                    log.info("[ADMIN] @{} выключил /god режим", username);
+                    sendText(chatId, "✅ GOD режим выключен");
+                }
+                return true;
+            }
+            case "/add_all" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                if (!isTesterModeEnabled(p.get().id())) {
+                    sendText(chatId, "Сначала включи режим тестировщика: /on");
+                    return true;
+                }
+                int amount = parts.length >= 2 ? safeParseInt(parts[1], 0) : 0;
+                if (amount <= 0) {
+                    sendText(chatId, "Использование: /add_all 10000");
+                    return true;
+                }
+                gameDao.addResources(p.get().id(), new GameCatalog.Cost(amount, amount, amount, amount, amount, amount, amount));
+                log.info("[ADMIN] @{} использовал /add_all {}", username, amount);
+                sendText(chatId, "✅ Добавлено всех ресурсов: " + amount);
+                return true;
+            }
+            case "/add" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                if (!isTesterModeEnabled(p.get().id())) {
+                    sendText(chatId, "Сначала включи режим тестировщика: /on");
+                    return true;
+                }
+                if (parts.length < 3) {
+                    sendText(chatId, "Использование: /add дерево 1000");
+                    return true;
+                }
+                String key = mapResourceAlias(parts[1]);
+                int amount = safeParseInt(parts[2], 0);
+                if (key == null || amount <= 0) {
+                    sendText(chatId, "Ресурс: дерево/камень/еда/железо/золото/манна/алкоголь");
+                    return true;
+                }
+                gameDao.addSingleResource(p.get().id(), key, amount);
+                log.info("[ADMIN] @{} использовал /add {} {}", username, parts[1], amount);
+                sendText(chatId, "✅ Добавлено: " + parts[1] + " +" + amount);
+                return true;
+            }
+            case "/max_res" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                if (!isTesterModeEnabled(p.get().id())) {
+                    sendText(chatId, "Сначала включи режим тестировщика: /on");
+                    return true;
+                }
+                gameDao.setResourcesExact(p.get().id(), 1_000_000, 1_000_000, 1_000_000, 1_000_000, 1_000_000, 1_000_000, 1_000_000);
+                log.info("[ADMIN] @{} использовал /max_res", username);
+                sendText(chatId, "✅ Ресурсы установлены на максимум");
+                return true;
+            }
+            case "/all_units" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                for (GameCatalog.UnitSpec unit : catalog.unitsForFaction(p.get().faction())) {
+                    gameDao.upsertArmy(unit.key(), unit.power(), p.get().id(), 200);
+                }
+                log.info("[ADMIN] @{} использовал /all_units", username);
+                sendText(chatId, "✅ Выданы все юниты текущей расы (по 200)");
+                return true;
+            }
+            case "/all_heroes" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                for (String heroKey : HERO_ALIASES.values()) {
+                    gameDao.addInventoryItem(p.get().id(), heroKey, 1);
+                }
+                log.info("[ADMIN] @{} использовал /all_heroes", username);
+                sendText(chatId, "✅ Выданы все тестовые герои");
+                return true;
+            }
+            case "/hero" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                if (parts.length < 2) {
+                    sendText(chatId, "Использование: /hero мусаси");
+                    return true;
+                }
+                String hero = HERO_ALIASES.get(parts[1].toLowerCase());
+                if (hero == null) {
+                    sendText(chatId, "Неизвестный герой.");
+                    return true;
+                }
+                gameDao.addInventoryItem(p.get().id(), hero, 1);
+                log.info("[ADMIN] @{} использовал /hero {}", username, parts[1]);
+                sendText(chatId, "✅ Герой выдан: " + parts[1]);
+                return true;
+            }
+            case "/upgrade_hero" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                if (parts.length < 2) {
+                    sendText(chatId, "Использование: /upgrade_hero мусаси");
+                    return true;
+                }
+                String hero = HERO_ALIASES.get(parts[1].toLowerCase());
+                if (hero == null) {
+                    sendText(chatId, "Неизвестный герой.");
+                    return true;
+                }
+                gameDao.addInventoryItem(p.get().id(), hero + "_MAX", 1);
+                log.info("[ADMIN] @{} использовал /upgrade_hero {}", username, parts[1]);
+                sendText(chatId, "✅ Герой прокачан до MAX: " + parts[1]);
+                return true;
+            }
+            case "/max_town" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                gameDao.setCityLevel(p.get().id(), 10);
+                log.info("[ADMIN] @{} использовал /max_town", username);
+                sendText(chatId, "✅ Уровень города установлен на 10");
+                return true;
+            }
+            case "/build_all" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                Map<String, BuildingState> current = gameDao.loadBuildingMap(p.get().id());
+                for (GameCatalog.BuildingSpec spec : catalog.buildings().values()) {
+                    if (!current.containsKey(spec.key())) {
+                        gameDao.buildInstant(p.get().id(), spec.key());
+                    }
+                    int target = catalog.maxBuildingLevel(spec.key());
+                    for (int i = 1; i < target; i++) {
+                        gameDao.upgradeBuildingInstant(p.get().id(), spec.key());
+                    }
+                }
+                log.info("[ADMIN] @{} использовал /build_all", username);
+                sendText(chatId, "✅ Все постройки открыты");
+                return true;
+            }
+            case "/reset" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                gameDao.resetPlayerProgress(p.get().id());
+                log.info("[ADMIN] @{} использовал /reset", username);
+                sendText(chatId, "✅ Прогресс сброшен");
+                return true;
+            }
+            case "/win" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                gameDao.addSingleResource(p.get().id(), "GOLD", 500);
+                gameDao.addSingleResource(p.get().id(), "MANA", 50);
+                log.info("[ADMIN] @{} использовал /win", username);
+                sendText(chatId, "✅ Мгновенная победа (тест): +500 золота, +50 манны");
+                return true;
+            }
+            case "/test_fight" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                int enemyPower = parts.length >= 2 ? safeParseInt(parts[1], 100) : 100;
+                int myPower = getPlayerPower(p.get().id());
+                boolean win = myPower >= enemyPower || ThreadLocalRandom.current().nextBoolean();
+                if (win) {
+                    gameDao.addSingleResource(p.get().id(), "GOLD", 300);
+                    sendText(chatId, "✅ Тестовый бой выигран\nТвоя сила: " + myPower + "\nСила врага: " + enemyPower + "\nНаграда: +300 золота");
+                } else {
+                    sendText(chatId, "❌ Тестовый бой проигран\nТвоя сила: " + myPower + "\nСила врага: " + enemyPower);
+                }
+                log.info("[ADMIN] @{} использовал /test_fight {}", username, enemyPower);
+                return true;
+            }
+            case "/no_cooldown" -> {
+                if (p.isEmpty()) {
+                    sendText(chatId, "Сначала зарегистрируйся через /start");
+                    return true;
+                }
+                Long state = gameDao.getPlayerState(p.get().id(), "NO_COOLDOWN");
+                if (state == null) {
+                    gameDao.setPlayerState(p.get().id(), "NO_COOLDOWN", 1);
+                    sendText(chatId, "✅ Кулдауны отключены");
+                } else {
+                    gameDao.clearPlayerState(p.get().id(), "NO_COOLDOWN");
+                    sendText(chatId, "✅ Кулдауны включены");
+                }
+                log.info("[ADMIN] @{} использовал /no_cooldown", username);
+                return true;
+            }
+            case "/listadmins" -> {
+                log.info("[ADMIN] @{} использовал /listadmins", username);
+                sendText(chatId, "Админы: " + String.join(", ", ADMIN_USERNAMES));
+                return true;
+            }
+            case "/addadmin" -> {
+                if (parts.length < 2) {
+                    sendText(chatId, "Использование: /addadmin @username");
+                    return true;
+                }
+                ADMIN_USERNAMES.add(parts[1].replace("@", "").toLowerCase());
+                log.info("[ADMIN] @{} добавил админа {}", username, parts[1]);
+                sendText(chatId, "✅ Админ добавлен: " + parts[1]);
+                return true;
+            }
+            case "/removeadmin" -> {
+                if (parts.length < 2) {
+                    sendText(chatId, "Использование: /removeadmin @username");
+                    return true;
+                }
+                ADMIN_USERNAMES.remove(parts[1].replace("@", "").toLowerCase());
+                log.info("[ADMIN] @{} удалил админа {}", username, parts[1]);
+                sendText(chatId, "✅ Админ удален: " + parts[1]);
+                return true;
+            }
+            default -> {
+                return false;
+            }
+        }
     }
 
     private void handleGroupCommand(long chatId, long tgId, String command) {
@@ -628,6 +923,82 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         return chatId == groupChatId || (groupChatId > 0 && chatId == -groupChatId);
     }
 
+    private boolean isAdmin(Message message) {
+        if (message == null || message.getFrom() == null) {
+            return false;
+        }
+        String username = message.getFrom().getUserName();
+        long userId = message.getFrom().getId();
+        boolean byId = adminUserIds.contains(userId);
+        if (username == null || username.isBlank()) {
+            return byId;
+        }
+        return byId || ADMIN_USERNAMES.contains(username.replace("@", "").toLowerCase());
+    }
+
+    private boolean isAdminCommand(String commandToken) {
+        if (commandToken == null) {
+            return false;
+        }
+        String cmd = commandToken.toLowerCase();
+        return Set.of(
+                "/admin",
+                "/on", "/off", "/status",
+                "/god", "/add", "/add_all", "/max_res",
+                "/all_units", "/all_heroes", "/hero", "/upgrade_hero",
+                "/max_town", "/build_all", "/reset",
+                "/win", "/test_fight", "/no_cooldown",
+                "/addadmin", "/removeadmin", "/listadmins"
+        ).contains(cmd);
+    }
+
+    private boolean isTesterModeEnabled(long playerId) {
+        return gameDao.getPlayerState(playerId, "TESTER_MODE") != null;
+    }
+
+    private Set<Long> parseAdminIds(String raw) {
+        Set<Long> ids = new HashSet<>();
+        if (raw == null || raw.isBlank()) {
+            return ids;
+        }
+        for (String part : raw.split(",")) {
+            String token = part.trim();
+            if (token.isEmpty()) {
+                continue;
+            }
+            try {
+                ids.add(Long.parseLong(token));
+            } catch (NumberFormatException ex) {
+                log.warn("Invalid ADMIN_IDS entry: {}", token);
+            }
+        }
+        return ids;
+    }
+
+    private int safeParseInt(String value, int fallback) {
+        try {
+            return Integer.parseInt(value);
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private String mapResourceAlias(String token) {
+        if (token == null) {
+            return null;
+        }
+        return switch (token.toLowerCase()) {
+            case "wood", "дерево", "древо" -> "WOOD";
+            case "stone", "камень" -> "STONE";
+            case "food", "еда" -> "FOOD";
+            case "iron", "железо" -> "IRON";
+            case "gold", "золото" -> "GOLD";
+            case "mana", "манна", "мана" -> "MANA";
+            case "alcohol", "алкоголь", "алко" -> "ALCOHOL";
+            default -> null;
+        };
+    }
+
     private String cityLevelTitle(int level) {
         return switch (level) {
             case 1 -> "Деревня";
@@ -637,6 +1008,9 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             case 5 -> "Королевство";
             case 6 -> "Империя";
             case 7 -> "Мировая держава";
+            case 8 -> "Королевство Света";
+            case 9 -> "Великая Империя";
+            case 10 -> "Держава";
             default -> "Уровень " + level;
         };
     }
@@ -754,7 +1128,15 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                     "✅ Регистрация завершена!\n\n" +
                             "Деревня: " + player.villageName() + "\n" +
                             "Фракция: " + faction.getTitle() + "\n" +
-                            "Старт: дерево 200, камень 150, еда 200, золото 50\n\n" +
+                            "\nДОСТУПНЫЕ РЕСУРСЫ:\n" +
+                            "🪵 Дерево: 200\n" +
+                            "🪨 Камень: 150\n" +
+                            "🌾 Еда: 200\n" +
+                            "⚔️ Железо: 0\n" +
+                            "💰 Золото: 50\n" +
+                            "🧪 Манна: 0\n" +
+                            "🍺 Алкоголь: 0\n\n" +
+                            "Используй /город чтобы строить и развиваться\n\n" +
                             factionFinalMessage(faction),
                     menuService.mainMenu());
             return;
@@ -778,6 +1160,8 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 case "menu:inventory" -> showInventory(chatId, player);
                 case "menu:craft" -> showCraftMenu(chatId, player);
                 case "menu:alliance" -> showAllianceMenu(chatId, player);
+                case "menu:heroes" -> showHeroesMenu(chatId, player);
+                case "menu:profile" -> showProfileMenu(chatId, player);
                 default -> sendText(chatId, "Неизвестное действие.", menuService.mainMenu());
             }
             return;
@@ -846,10 +1230,76 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
         sendText(chatId, text,
                 InlineKeyboardMarkup.builder()
-                        .keyboardRow(List.of(btn("💎 Ресурсы", "city:resources"), btn("🏗️ Здания", "city:buildings")))
-                        .keyboardRow(List.of(btn("⚔️ Армия", "city:army"), btn("🎒 Инвентарь", "city:inventory")))
+                        .keyboardRow(List.of(btn("🏗️ СТРОИТЬ", "menu:build"), btn("📈 РЕСУРСЫ", "city:resources")))
+                        .keyboardRow(List.of(btn("🏛️ КАЗАРМЫ", "menu:army"), btn("🍺 ТАВЕРНА", "menu:heroes")))
                         .keyboardRow(List.of(btn("◀️ Главное меню", "city:back")))
                         .build());
+    }
+
+    private void showProfileMenu(long chatId, PlayerRecord player) {
+        int rank = gameDao.rankByCityLevel(player.id());
+        int power = getPlayerPower(player.id());
+        GameDao.PlayerBattleStats stats = gameDao.playerBattleStats(player.id());
+        sendText(chatId,
+                "📊 ПРОФИЛЬ\n" +
+                        "🏕️ " + player.villageName() + "\n" +
+                        "🌍 Фракция: " + player.faction().getTitle() + "\n" +
+                        "🏰 Уровень города: " + cityLevelTitle(player.cityLevel()) + "\n" +
+                        "⚔️ Мощь: " + power + "\n" +
+                        "🏆 Ранг: #" + rank + "\n" +
+                        "🥇 Побед: " + stats.wins() + " | 💀 Поражений: " + stats.losses(),
+                InlineKeyboardMarkup.builder().keyboardRow(List.of(btn("◀️ Назад", "city:back"))).build());
+    }
+
+    private void showHeroesMenu(long chatId, PlayerRecord player) {
+        List<KeyValueAmount> inv = gameDao.loadInventory(player.id());
+        long heroCount = inv.stream().filter(i -> i.type().startsWith("HERO_")).mapToInt(KeyValueAmount::quantity).sum();
+        sendText(chatId,
+                "👑 ГЕРОИ\n" +
+                        "Текущих героев в инвентаре: " + heroCount + "\n\n" +
+                        "Редкости:\n" +
+                        "🟢 Обычный 60%\n" +
+                        "🔵 Редкий 30%\n" +
+                        "🟣 Легендарный 9%\n" +
+                        "🟡 Мифический 1%\n\n" +
+                        "Героев можно получать через таверну, победы и ивенты.",
+                InlineKeyboardMarkup.builder().keyboardRow(List.of(btn("◀️ Назад", "city:back"))).build());
+    }
+
+    private void showAdminMenu(long chatId, String username, Long userId) {
+        boolean isAdminByUsername = username != null && ADMIN_USERNAMES.contains(username.replace("@", "").toLowerCase());
+        boolean isAdminById = userId != null && adminUserIds.contains(userId);
+        if (!isAdminByUsername && !isAdminById) {
+            sendText(chatId, "У вас нет прав");
+            return;
+        }
+        sendText(chatId,
+                "🔧 АДМИН-ПАНЕЛЬ\n" +
+                        "\n🎮 РЕЖИМЫ:\n" +
+                        "/on - включить режим тестировщика\n" +
+                        "/off - выключить (обычный игрок)\n" +
+                        "/status - проверить режим\n" +
+                        "\n💰 РЕСУРСЫ:\n" +
+                        "/god - бесконечные ресурсы (вкл/выкл)\n" +
+                        "/add [ресурс] [кол-во] - добавить (дерево, камень, еда, железо, золото, манна, алкоголь)\n" +
+                        "/add_all [кол-во] - добавить всё\n" +
+                        "/max_res - максимум всех ресурсов\n" +
+                        "\n⚔️ ЮНИТЫ И ГЕРОИ:\n" +
+                        "/all_units - получить всех юнитов 5 уровня\n" +
+                        "/all_heroes - получить всех героев\n" +
+                        "/hero [имя] - получить героя\n" +
+                        "\n🏰 ГОРОД:\n" +
+                        "/max_town - макс уровень города\n" +
+                        "/build_all - построить всё\n" +
+                        "/reset - сбросить прогресс\n" +
+                        "\n⚡ БОЙ:\n" +
+                        "/win - мгновенная победа\n" +
+                        "/test_fight [сила] - тестовый бой\n" +
+                        "/no_cooldown - отключить кулдауны\n" +
+                        "\n👑 УПРАВЛЕНИЕ:\n" +
+                        "/addadmin @username - добавить админа\n" +
+                        "/removeadmin @username - убрать\n" +
+                        "/listadmins - список админов");
     }
 
     private void handleCityCallbacks(long chatId, PlayerRecord player, String data) {
@@ -898,14 +1348,6 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                         btn("▶️", "faction:view:" + Math.floorMod(safeIndex + 1, FACTION_ORDER.size()))
                 ))
                 .build();
-        sendPhotoResourceWithUrlFallbacks(
-                chatId,
-                FACTION_IMAGE_RESOURCES.get(faction),
-                resourceFileName(FACTION_IMAGE_RESOURCES.get(faction)),
-                List.of(FACTION_IMAGES_PRIMARY.get(faction), FACTION_IMAGES_FALLBACK.get(faction)),
-                "Фракция: " + factionEmoji(faction) + " " + faction.getTitle(),
-                null
-        );
         sendTextRaw(chatId, text, keyboard);
     }
 
@@ -924,85 +1366,90 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private String factionCardText(Faction faction) {
         return switch (faction) {
-            case KNIGHTS -> "=== РЫЦАРИ ===\n\n⚔️ РЫЦАРИ ЗАПАДА\n\n" +
-                    "Благородные воины в тяжёлых доспехах.\n" +
-                    "Медленные но непробиваемые.\n\n" +
-                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
-                    "- Лучшая броня на сервере\n" +
-                    "- +20% защита против лучников\n" +
-                    "- Паладины — самые мощные юниты\n" +
-                    "- Идеальны для обороны\n\n" +
-                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
-                    "- Самый долгий откат после боя — 12ч\n" +
-                    "- Дорогие юниты требуют много ресурсов\n" +
-                    "- Слабы на море и в джунглях\n" +
-                    "- Медленное развитие\n\n" +
-                    "⚔️ Путь воина: Мечник → Арбалетчик → Паладин";
-            case SAMURAI -> "=== САМУРАИ ===\n\n🥷 САМУРАИ ВОСТОКА\n\n" +
-                    "Дисциплина и мастерство клинка.\n" +
-                    "Быстрые и смертоносные в ближнем бою.\n\n" +
-                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
-                    "- +15% бонус в ближнем бою\n" +
-                    "- Быстрое обучение воинов\n" +
-                    "- Сбалансированные юниты\n" +
-                    "- Хороши как в атаке так и в обороне\n\n" +
-                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
-                    "- Слабы на море (-20% на воде)\n" +
-                    "- Средняя броня\n" +
-                    "- Нет особых бонусов к ресурсам\n\n" +
-                    "⚔️ Путь воина: Асигару → Лучник → Самурай";
-            case VIKINGS -> "=== ВИКИНГИ ===\n\n🪓 ВИКИНГИ СЕВЕРА\n\n" +
-                    "Берсерки которые не знают страха.\n" +
-                    "Непобедимы на море и в набегах.\n\n" +
-                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
-                    "- +25% бонус на море\n" +
-                    "- Порт даёт в 2 раза больше юнитов\n" +
-                    "- Берсерки — дешёвые но яростные\n" +
-                    "- Лучшие для быстрых набегов\n\n" +
-                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
-                    "- Слабы в обороне (-15%)\n" +
-                    "- Уязвимы к магии Ацтеков\n" +
-                    "- Плохо держат осаду\n\n" +
-                    "⚔️ Путь воина: Берсерк → Лучник → Ярл";
-            case MONGOLS -> "=== МОНГОЛЫ ===\n\n🏹 МОНГОЛЫ СТЕПИ\n\n" +
-                    "Непобедимая конница. Быстрее всех.\n" +
-                    "Империя которая покорила полмира.\n\n" +
-                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
-                    "- Самый короткий откат после боя — 4ч\n" +
-                    "- В степи: победа ×1.1, поражение ×0.9\n" +
-                    "- Всадники — лучшая кавалерия\n" +
-                    "- Идеальны для частых атак\n\n" +
-                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
-                    "- Штраф в холоде и на море\n" +
-                    "- Слабая оборона городов\n" +
-                    "- Зависят от конюшни\n\n" +
-                    "⚔️ Путь воина: Лучник → Всадник → Хан";
-            case DESERT_DWELLERS -> "=== ПУСТЫННИКИ ===\n\n🐪 ПУСТЫННИКИ ВОСТОКА\n\n" +
-                    "Выносливые воины пустыни.\n" +
-                    "Дешёвые и надёжные — идеально для новичков.\n\n" +
-                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
-                    "- Самые дешёвые юниты\n" +
-                    "- +15% в жаре и пустыне\n" +
-                    "- Не требуют много ресурсов\n" +
-                    "- Хороший баланс атака/защита\n\n" +
-                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
-                    "- Нет выдающихся бонусов\n" +
-                    "- Средняя мощь юнитов\n" +
-                    "- Штраф в холоде\n\n" +
-                    "⚔️ Путь воина: Копейщик → Лучник → Мамлюк";
-            case AZTECS -> "=== АЦТЕКИ ===\n\n🗿 АЦТЕКИ ДЖУНГЛЕЙ\n\n" +
-                    "Мистические воины с силой богов.\n" +
-                    "Манна даёт им сверхъестественную мощь.\n\n" +
-                    "✅ СИЛЬНЫЕ СТОРОНЫ:\n" +
-                    "- +20% производство манны\n" +
-                    "- +15% в джунглях\n" +
-                    "- Жрецы-воины — уникальные юниты с магией\n" +
-                    "- Особые способности в бою\n\n" +
-                    "❌ СЛАБЫЕ СТОРОНЫ:\n" +
-                    "- Слабы против тяжёлой брони\n" +
-                    "- Требуют манну для сильных юнитов\n" +
-                    "- Сложнее в управлении\n\n" +
-                    "⚔️ Путь воина: Воин → Ягуар → Жрец-воин";
+            case KNIGHTS -> "=== РЫЦАРИ ЗАПАДА ===\n" +
+                    "Благородные воины в тяжёлых доспехах. Медленные но непробиваемые.\n\n" +
+                    "СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "• Лучшая броня на сервере (+30% защиты в раунде 2)\n" +
+                    "• Паладины - мощнейшие юниты\n" +
+                    "• Бонус против Викингов (+40% защиты)\n" +
+                    "• Идеальны для обороны\n\n" +
+                    "СЛАБЫЕ СТОРОНЫ:\n" +
+                    "• Очень медленные (кулдаун 12ч)\n" +
+                    "• Уязвимы для обстрела монголов (-30%)\n" +
+                    "• Дорогие юниты (требуют много железа)\n" +
+                    "• Долгое восстановление\n\n" +
+                    "ПУТЬ ВОИНА:\n" +
+                    "Ополченец → Арбалетчик → Мечник → Тяжелый рыцарь → Паладин";
+            case SAMURAI -> "=== САМУРАИ ВОСТОКА ===\n" +
+                    "Дисциплина и мастерство клинка. Быстрые и смертельные.\n\n" +
+                    "СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "• Клинок смерти - 20% шанс убить врага мгновенно\n" +
+                    "• Высокая скорость (6-7)\n" +
+                    "• Бонус против Монголов (+25% уклонение от стрел)\n" +
+                    "• Ниндзя - неуловимы\n\n" +
+                    "СЛАБЫЕ СТОРОНЫ:\n" +
+                    "• Слабая броня\n" +
+                    "• Уязвимы для Викингов (-20% защиты)\n" +
+                    "• Требуют много еды\n" +
+                    "• Нет тяжелых юнитов\n\n" +
+                    "ПУТЬ ВОИНА:\n" +
+                    "Асигару → Лучник → Самурай с катаной → Ниндзя → Кендо-мастер";
+            case VIKINGS -> "=== ВИКИНГИ СЕВЕРА ===\n" +
+                    "Ярость и сила. Берсерки не знают страха.\n\n" +
+                    "СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "• Берсерк - чем меньше HP, тем сильнее атака (до +70%)\n" +
+                    "• Вампиризм (восстанавливаются в бою)\n" +
+                    "• Бонус против Самураев (+35% атаки)\n" +
+                    "• Дешевые юниты\n\n" +
+                    "СЛАБЫЕ СТОРОНЫ:\n" +
+                    "• Нет тяжелой брони\n" +
+                    "• Уязвимы для Рыцарей (-30% атаки)\n" +
+                    "• Требуют много алкоголя\n" +
+                    "• Недисциплинированные\n\n" +
+                    "ПУТЬ ВОИНА:\n" +
+                    "Трэлл → Метатель топора → Берсерк → Хирдманн → Ярл";
+            case MONGOLS -> "=== МОНГОЛЫ СТЕПИ ===\n" +
+                    "Конные лучники. Быстрее ветра.\n\n" +
+                    "СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "• Подвижность - могут убежать без потерь 1 раз в день\n" +
+                    "• Самая высокая скорость (7)\n" +
+                    "• Бонус против Рыцарей (+50% урона в обстреле)\n" +
+                    "• Обстрел перед боем\n\n" +
+                    "СЛАБЫЕ СТОРОНЫ:\n" +
+                    "• Слабы в ближнем бою\n" +
+                    "• Уязвимы для Самураев (-25% точности)\n" +
+                    "• Требуют много дерева для стрел\n" +
+                    "• Мало брони\n\n" +
+                    "ПУТЬ ВОИНА:\n" +
+                    "Скотовод → Конный лучник → Багатур → Нойон → Чингизид";
+            case DESERT_DWELLERS -> "=== ПУСТЫННИКИ ВОСТОКА ===\n" +
+                    "Таинственные воины песков. Торговцы и убийцы.\n\n" +
+                    "СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "• Мираж - 30% шанс увернуться от атаки\n" +
+                    "• Ассасины убивают командиров\n" +
+                    "• Бонус против Ацтеков (+30% морали)\n" +
+                    "• Лучшие торговцы (+20% золота)\n\n" +
+                    "СЛАБЫЕ СТОРОНЫ:\n" +
+                    "• Медленные вне пустыни\n" +
+                    "• Уязвимы для Викингов\n" +
+                    "• Дорогие постройки\n" +
+                    "• Требуют манну\n\n" +
+                    "ПУТЬ ВОИНА:\n" +
+                    "Погонщик → Янычар → Мамлюк → Ассасин → Султан";
+            case AZTECS -> "=== АЦТЕКИ ДЖУНГЛЕЙ ===\n" +
+                    "Кровавые жертвы древним богам.\n\n" +
+                    "СИЛЬНЫЕ СТОРОНЫ:\n" +
+                    "• Жертва - убивают слабого, усиливая сильного (+50%)\n" +
+                    "• Жрецы используют магию\n" +
+                    "• Бонус против Пустынников (+50% за жертвы)\n" +
+                    "• Получают силу от каждой смерти\n\n" +
+                    "СЛАБЫЕ СТОРОНЫ:\n" +
+                    "• Без жертв - штраф -20%\n" +
+                    "• Уязвимы для Рыцарей (сталь против дерева)\n" +
+                    "• Требуют много манны\n" +
+                    "• Медленное развитие\n\n" +
+                    "ПУТЬ ВОИНА:\n" +
+                    "Масеуалли → Лучник-воин → Ягуар → Орел → Жрец";
         };
     }
 
@@ -1025,12 +1472,12 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private String factionEmoji(Faction faction) {
         return switch (faction) {
-            case KNIGHTS -> "⚔️";
-            case SAMURAI -> "🥷";
+            case KNIGHTS -> "🛡️";
+            case SAMURAI -> "⚔️";
             case VIKINGS -> "🪓";
             case MONGOLS -> "🏹";
-            case DESERT_DWELLERS -> "🐪";
-            case AZTECS -> "🗿";
+            case DESERT_DWELLERS -> "🏜️";
+            case AZTECS -> "🌞";
         };
     }
 
@@ -2336,25 +2783,15 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             case "RARE" -> "📘✨ РЕДКАЯ НАХОДКА!\n" + catalog.itemDisplay(found);
             default -> "📜 Ты нашёл чертёж!\n" + catalog.itemDisplay(found);
         };
-        String gif = switch (rarity) {
-            case "LEGENDARY" -> LOOT_LEGENDARY_GIF_URL;
-            case "RARE" -> LOOT_RARE_GIF_URL;
-            default -> LOOT_COMMON_GIF_URL;
-        };
         InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
                 .keyboardRow(List.of(btn("🔨 Сохранить для крафта", "loot:save:" + found), btn("💰 Продать", "loot:sell:" + found)))
                 .keyboardRow(List.of(btn("🔨 Аукцион", "loot:auction:" + found)))
                 .build();
-        String resource = switch (rarity) {
-            case "LEGENDARY" -> LOOT_LEGENDARY_RESOURCE;
-            case "RARE" -> LOOT_RARE_RESOURCE;
-            default -> LOOT_COMMON_RESOURCE;
-        };
         sendAnimationResourceWithUrlFallback(
                 player.telegramId(),
-                resource,
-                resourceFileName(resource),
-                gif,
+                null,
+                null,
+                null,
                 text,
                 keyboard
         );
@@ -2377,9 +2814,9 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         gameDao.appendDailyLog("RARE", player.villageName() + " нашёл " + catalog.itemDisplay(found));
         pendingLootByPlayer.put(player.id(), found);
         sendAnimationResourceWithUrlFallback(player.telegramId(),
-                LOOT_ARMOR_RESOURCE,
-                resourceFileName(LOOT_ARMOR_RESOURCE),
-                LOOT_ARMOR_GIF_URL,
+                null,
+                null,
+                null,
                 "🛡️ Ты нашёл " + catalog.itemDisplay(found) + "!\n" +
                         "Бонус защиты: +" + (int) (armorBonus(found) * 100) + "%",
                 InlineKeyboardMarkup.builder()
@@ -3344,9 +3781,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private void sendBattleSummaryMedia(long chatId, boolean won, String details) {
         String caption = (won ? "🏆 ПОБЕДА!\n" : "💀 ПОРАЖЕНИЕ...\n") + details;
-        String resource = won ? BATTLE_WIN_RESOURCE : BATTLE_LOSE_RESOURCE;
-        String url = won ? WIN_GIF_URL : LOSE_GIF_URL;
-        sendAnimationResourceWithUrlFallback(chatId, resource, resourceFileName(resource), url, caption, null);
+        sendTextRaw(chatId, caption, null);
     }
 
     private void sendCityLevelUpMedia(long chatId, int newCityLevel) {
@@ -3368,7 +3803,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 text = "🌍 Невероятно! Ты построил Империю! Весь мир трепещет!";
             }
         }
-        sendAnimationResourceWithUrlFallback(chatId, LEVEL_UP_RESOURCE, "levelup.gif", LEVEL_UP_GIF_URL, text, null);
+        sendTextRaw(chatId, text, null);
     }
 
     private InlineKeyboardButton btn(String text, String callbackData) {
@@ -3397,13 +3832,6 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     }
 
     private void sendText(long chatId, String text, InlineKeyboardMarkup keyboard) {
-        if (isMainMenuKeyboard(keyboard)) {
-            if (text != null && !text.isBlank()) {
-                sendTextRaw(chatId, text, null);
-            }
-            sendPhotoResourceWithUrlFallback(chatId, MAIN_MENU_COVER_RESOURCE, "menu.jpg", MAIN_MENU_COVER_URL, MAIN_MENU_COVER_CAPTION, keyboard);
-            return;
-        }
         sendTextRaw(chatId, text, keyboard);
     }
 
@@ -3429,126 +3857,32 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     }
 
     private void sendPhotoWithFallback(long chatId, String photoUrl, String caption, InlineKeyboardMarkup keyboard) {
-        if (photoUrl == null || photoUrl.isBlank()) {
-            sendTextRaw(chatId, caption, keyboard);
-            return;
-        }
-        SendPhoto photo = SendPhoto.builder()
-                .chatId(String.valueOf(chatId))
-                .photo(new InputFile(photoUrl))
-                .caption(caption)
-                .replyMarkup(keyboard)
-                .build();
-        try {
-            execute(photo);
-        } catch (Exception e) {
-            log.warn("Failed to send faction photo, fallback to text: {}", e.getMessage());
-            sendTextRaw(chatId, caption, keyboard);
-        }
+        sendTextRaw(chatId, caption, keyboard);
     }
 
     private void sendPhotoResourceWithUrlFallback(long chatId, String resourcePath, String fileName, String photoUrl, String caption, InlineKeyboardMarkup keyboard) {
-        if (sendPhotoFromResource(chatId, resourcePath, fileName, caption, keyboard)) {
-            return;
-        }
-        sendPhotoWithFallback(chatId, photoUrl, caption, keyboard);
+        sendTextRaw(chatId, caption, keyboard);
     }
 
     private void sendPhotoResourceWithUrlFallbacks(long chatId, String resourcePath, String fileName, List<String> photoUrls, String caption, InlineKeyboardMarkup keyboard) {
-        if (sendPhotoFromResource(chatId, resourcePath, fileName, caption, keyboard)) {
-            return;
-        }
-        if (photoUrls != null) {
-            for (String photoUrl : photoUrls) {
-                if (photoUrl == null || photoUrl.isBlank()) {
-                    continue;
-                }
-                try {
-                    SendPhoto photo = SendPhoto.builder()
-                            .chatId(String.valueOf(chatId))
-                            .photo(new InputFile(photoUrl))
-                            .caption(caption)
-                            .replyMarkup(keyboard)
-                            .build();
-                    execute(photo);
-                    return;
-                } catch (Exception e) {
-                    log.warn("Could not send photo {}, trying next/fallback: {}", photoUrl, e.getMessage());
-                }
-            }
-        }
         sendTextRaw(chatId, caption, keyboard);
     }
 
     private boolean sendPhotoFromResource(long chatId, String resourcePath, String fileName, String caption, InlineKeyboardMarkup keyboard) {
-        if (resourcePath == null || resourcePath.isBlank()) {
-            return false;
-        }
-        try (InputStream is = getClass().getResourceAsStream(resourcePath)) {
-            if (is == null) {
-                return false;
-            }
-            SendPhoto photo = SendPhoto.builder()
-                    .chatId(String.valueOf(chatId))
-                    .photo(new InputFile(is, fileName))
-                    .caption(caption)
-                    .replyMarkup(keyboard)
-                    .build();
-            execute(photo);
-            return true;
-        } catch (Exception e) {
-            log.warn("Could not send photo resource {}, fallback to url/text: {}", resourcePath, e.getMessage());
-            return false;
-        }
+        sendTextRaw(chatId, caption, keyboard);
+        return true;
     }
 
     private void sendAnimationResourceWithUrlFallback(long chatId, String resourcePath, String fileName, String gifUrl, String caption, InlineKeyboardMarkup keyboard) {
-        if (sendAnimationFromResource(chatId, resourcePath, fileName, caption, keyboard)) {
-            return;
-        }
-        if (gifUrl == null || gifUrl.isBlank()) {
-            sendTextRaw(chatId, caption, keyboard);
-            return;
-        }
-        try {
-            SendAnimation anim = new SendAnimation();
-            anim.setChatId(String.valueOf(chatId));
-            anim.setAnimation(new InputFile(gifUrl));
-            anim.setCaption(caption);
-            anim.setReplyMarkup(keyboard);
-            execute(anim);
-        } catch (Exception e) {
-            log.warn("Could not send animation url, sending text only: {}", e.getMessage());
-            sendTextRaw(chatId, caption, keyboard);
-        }
+        sendTextRaw(chatId, caption, keyboard);
     }
 
     private boolean sendAnimationFromResource(long chatId, String resourcePath, String fileName, String caption, InlineKeyboardMarkup keyboard) {
-        if (resourcePath == null || resourcePath.isBlank()) {
-            return false;
-        }
-        try (InputStream is = getClass().getResourceAsStream(resourcePath)) {
-            if (is == null) {
-                return false;
-            }
-            SendAnimation anim = new SendAnimation();
-            anim.setChatId(String.valueOf(chatId));
-            anim.setAnimation(new InputFile(is, fileName));
-            anim.setCaption(caption);
-            anim.setReplyMarkup(keyboard);
-            execute(anim);
-            return true;
-        } catch (Exception e) {
-            log.warn("Could not send animation resource {}, fallback to url/text: {}", resourcePath, e.getMessage());
-            return false;
-        }
+        sendTextRaw(chatId, caption, keyboard);
+        return true;
     }
 
     private String resourceFileName(String resourcePath) {
-        if (resourcePath == null || resourcePath.isBlank()) {
-            return "media.bin";
-        }
-        int i = resourcePath.lastIndexOf('/');
-        return i >= 0 ? resourcePath.substring(i + 1) : resourcePath;
+        return "media.bin";
     }
 }

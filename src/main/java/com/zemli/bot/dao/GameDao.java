@@ -55,24 +55,36 @@ public class GameDao {
                 """
                 UPDATE army
                 SET unit_power = CASE unit_type
-                    WHEN 'SWORDSMAN' THEN 5
-                    WHEN 'CROSSBOWMAN' THEN 12
-                    WHEN 'PALADIN' THEN 25
-                    WHEN 'ASHIGARU' THEN 5
-                    WHEN 'SAM_ARCHER' THEN 12
-                    WHEN 'SAMURAI' THEN 25
-                    WHEN 'BERSERK' THEN 6
-                    WHEN 'VIK_ARCHER' THEN 13
-                    WHEN 'JARL' THEN 28
-                    WHEN 'MONGOL_ARCHER' THEN 5
-                    WHEN 'RIDER' THEN 15
-                    WHEN 'KHAN' THEN 30
-                    WHEN 'SPEARMAN' THEN 5
-                    WHEN 'DES_ARCHER' THEN 11
-                    WHEN 'MAMLUK' THEN 24
-                    WHEN 'WARRIOR' THEN 5
-                    WHEN 'JAGUAR' THEN 14
-                    WHEN 'PRIEST' THEN 27
+                    WHEN 'KN_MILITIA' THEN 10
+                    WHEN 'KN_CROSSBOW' THEN 20
+                    WHEN 'KN_SWORDSMAN' THEN 35
+                    WHEN 'KN_HEAVY_KNIGHT' THEN 60
+                    WHEN 'KN_PALADIN' THEN 100
+                    WHEN 'SM_ASHIGARU' THEN 12
+                    WHEN 'SM_ARCHER' THEN 18
+                    WHEN 'SM_KATANA' THEN 40
+                    WHEN 'SM_NINJA' THEN 45
+                    WHEN 'SM_KENDO' THEN 85
+                    WHEN 'VK_THRALL' THEN 10
+                    WHEN 'VK_AXE_THROWER' THEN 25
+                    WHEN 'VK_BERSERK' THEN 50
+                    WHEN 'VK_HIRDMANN' THEN 45
+                    WHEN 'VK_JARL' THEN 90
+                    WHEN 'MG_HERDER' THEN 12
+                    WHEN 'MG_HORSE_ARCHER' THEN 28
+                    WHEN 'MG_BAGATUR' THEN 40
+                    WHEN 'MG_NOYON' THEN 55
+                    WHEN 'MG_CHINGIZID' THEN 95
+                    WHEN 'DS_DRIVER' THEN 15
+                    WHEN 'DS_JANISSARY' THEN 25
+                    WHEN 'DS_MAMLUK' THEN 45
+                    WHEN 'DS_ASSASSIN' THEN 50
+                    WHEN 'DS_SULTAN' THEN 90
+                    WHEN 'AZ_MASEUALLI' THEN 12
+                    WHEN 'AZ_WAR_ARCHER' THEN 20
+                    WHEN 'AZ_JAGUAR' THEN 40
+                    WHEN 'AZ_EAGLE' THEN 45
+                    WHEN 'AZ_PRIEST' THEN 70
                     ELSE unit_power
                 END
                 WHERE unit_power = 0
@@ -1473,7 +1485,7 @@ public class GameDao {
 
     public int upgradeBuildingInstant(long playerId, String buildingType) {
         return jdbcTemplate.update(
-                "UPDATE buildings SET level = CASE WHEN level < 3 THEN level + 1 ELSE level END WHERE player_id = ? AND building_type = ?",
+                "UPDATE buildings SET level = CASE WHEN building_type = 'TOWN_HALL' AND level < 10 THEN level + 1 WHEN building_type <> 'TOWN_HALL' AND level < 3 THEN level + 1 ELSE level END WHERE player_id = ? AND building_type = ?",
                 playerId, buildingType
         );
     }

@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.util.StringUtils;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
@@ -28,12 +29,16 @@ import java.util.List;
 public class TelegramBotConfig {
 
     private static final Logger log = LoggerFactory.getLogger(TelegramBotConfig.class);
-    @Value("${BOT_TOKEN}")
+    @Value("${BOT_TOKEN:}")
     private String botToken;
+    @Value("${BOT_TOKEN_TEST:}")
+    private String botTokenTest;
     @Value("${BOT_USERNAME}")
     private String botUsername;
     @Value("${GROUP_CHAT_ID:0}")
     private Long groupChatId;
+    @Value("${ADMIN_IDS:}")
+    private String adminIds;
 
     @Bean
     public ZemliTelegramBot zemliTelegramBot(
@@ -41,23 +46,37 @@ public class TelegramBotConfig {
             MenuService menuService,
             GameDao gameDao,
             GameCatalog gameCatalog,
-            TaskExecutor taskExecutor
+            TaskExecutor taskExecutor,
+            Environment environment
     ) {
-        if (!StringUtils.hasText(botToken)) {
-            throw new IllegalStateException("BOT_TOKEN is empty. Set BOT_TOKEN in Railway variables.");
+        boolean devMode = environment.matchesProfiles("dev", "default");
+        String selectedToken = devMode
+                ? (StringUtils.hasText(botTokenTest) ? botTokenTest : botToken)
+                : botToken;
+
+        if (!StringUtils.hasText(selectedToken)) {
+            throw new IllegalStateException(
+                    devMode
+                            ? "BOT_TOKEN_TEST/BOT_TOKEN is empty. Set token for dev profile."
+                            : "BOT_TOKEN is empty. Set production token for prod profile."
+            );
+        }
+        if (devMode && !StringUtils.hasText(botTokenTest)) {
+            log.warn("BOT_TOKEN_TEST is not set, using BOT_TOKEN in dev profile.");
         }
         if (!StringUtils.hasText(botUsername)) {
             throw new IllegalStateException("BOT_USERNAME is empty. Set BOT_USERNAME in Railway variables.");
         }
         return new ZemliTelegramBot(
-                botToken,
+                selectedToken,
                 botUsername,
                 registrationService,
                 menuService,
                 gameDao,
                 gameCatalog,
                 taskExecutor,
-                groupChatId == null ? 0L : groupChatId
+                groupChatId == null ? 0L : groupChatId,
+                adminIds
         );
     }
 
