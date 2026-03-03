@@ -6,8 +6,10 @@ import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -23,86 +25,131 @@ public class ImageService {
     }
 
     private void initVictoryImages() {
-        victoryImages.put("AZTEC_KNIGHTS", "/images/heroes/aztec_vs_knights_win.png");
-        victoryImages.put("AZTEC_SAMURAI", "/images/heroes/aztec_vs_samurais_win.png");
-        victoryImages.put("AZTEC_VIKING", "/images/heroes/aztec_vs_vikings_win.png");
-        victoryImages.put("AZTEC_MONGOL", "/images/heroes/aztec_vs_mongols_win.png");
-        victoryImages.put("AZTEC_ARABIAN", "/images/heroes/aztec_vs_arabians_win.png");
+        // Ацтеки
+        putVictory("aztec", "knight", "/images/heroes/lucid-origin_pixel_art_16-bit_aztec_eagle_warrior_holding_crusader_head_dead_knight_broken_sw-0.jpg");
+        putVictory("aztec", "samurai", "/images/heroes/lucid-origin_pixel_art_16-bit_aztec_jaguar_warrior_holding_samurai_head_dead_samurai_broken_k-0.jpg");
+        putVictory("aztec", "viking", "/images/heroes/lucid-origin_pixel_art_16-bit_aztec_warrior_holding_viking_head_dead_berserker_broken_axe_jun-0.jpg");
+        putVictory("aztec", "mongol", "/images/heroes/lucid-origin_pixel_art_16-bit_aztec_warrior_holding_mongol_head_dead_horse_archer_broken_bow_-0.jpg");
+        putVictory("aztec", "arabian", "/images/heroes/lucid-origin_pixel_art_16-bit_aztec_warrior_holding_arabian_head_dead_desert_warrior_broken_s-0.jpg");
 
-        victoryImages.put("ARABIAN_KNIGHTS", "/images/heroes/arabian_vs_knights_win.png");
-        victoryImages.put("ARABIAN_SAMURAI", "/images/heroes/arabian_vs_samurais_win.png");
-        victoryImages.put("ARABIAN_VIKING", "/images/heroes/arabian_vs_vikings_win.png");
-        victoryImages.put("ARABIAN_MONGOL", "/images/heroes/arabian_vs_mongols_win.png");
-        victoryImages.put("ARABIAN_AZTEC", "/images/heroes/arabian_vs_aztecs_win.png");
+        // Пустынники
+        putVictory("arabian", "knight", "/images/heroes/lucid-origin_pixel_art_16-bit_arabian_warrior_holding_crusader_head_dead_knight_broken_sword_-0.jpg");
+        putVictory("arabian", "samurai", "/images/heroes/lucid-origin_pixel_art_16-bit_arabian_warrior_holding_samurai_head_dead_samurai_broken_katana-0.jpg");
+        putVictory("arabian", "viking", "/images/heroes/lucid-origin_pixel_art_16-bit_arabian_warrior_holding_viking_head_dead_berserker_broken_axe_d-0.jpg");
+        putVictory("arabian", "mongol", "/images/heroes/lucid-origin_pixel_art_16-bit_arabian_warrior_holding_mongol_head_dead_horse_archer_broken_bo-0.jpg");
+        putVictory("arabian", "aztec", "/images/heroes/lucid-origin_pixel_art_16-bit_arabian_warrior_holding_aztec_head_dead_jaguar_warrior_pyramid_-0.jpg");
 
-        victoryImages.put("KNIGHT_SAMURAI", "/images/heroes/knight_vs_samurais_win.png");
-        victoryImages.put("KNIGHT_VIKING", "/images/heroes/knight_vs_vikings_win.png");
-        victoryImages.put("KNIGHT_MONGOL", "/images/heroes/knight_vs_mongols_win.png");
-        victoryImages.put("KNIGHT_ARABIAN", "/images/heroes/knight_vs_arabians_win.png");
-        victoryImages.put("KNIGHT_AZTEC", "/images/heroes/knight_vs_aztecs_win.png");
+        // Рыцари
+        putVictory("knight", "aztec", "/images/heroes/lucid-origin_pixel_art_16-bit_conquistador_knight_holding_aztec_feather_crown_dead_jaguar_war-0.jpg");
+        putVictory("knight", "mongol", "/images/heroes/lucid-origin_pixel_art_16-bit_knight_holding_mongol_horse_head_dead_mongol_archer_on_ground_b-0.jpg");
+        putVictory("knight", "viking", "/images/heroes/lucid-origin_pixel_art_16-bit_knight_standing_over_dead_viking_body_holding_viking_helmet_as_-0.jpg");
+        putVictory("knight", "samurai", "/images/heroes/lucid-origin_pixel_art_16-bit_knight_holding_severed_samurai_head_blood_dripping_dead_samurai-0.jpg");
+        putVictory("knight", "arabian", "/images/heroes/lucid-origin_pixel_art_16-bit_knight_holding_saracen_banner_trophy_dead_arabian_warrior_at_fe-0.jpg");
 
-        victoryImages.put("SAMURAI_KNIGHTS", "/images/heroes/samurai_vs_knights_win.png");
-        victoryImages.put("SAMURAI_VIKING", "/images/heroes/samurai_vs_vikings_win.png");
-        victoryImages.put("SAMURAI_MONGOL", "/images/heroes/samurai_vs_mongols_win.png");
-        victoryImages.put("SAMURAI_ARABIAN", "/images/heroes/samurai_vs_arabians_win.png");
-        victoryImages.put("SAMURAI_AZTEC", "/images/heroes/samurai_vs_aztecs_win.png");
+        // Самураи
+        putVictory("samurai", "knight", "/images/heroes/lucid-origin_pixel_art_16-bit_samurai_holding_severed_knight_head_dead_knight_in_armor_at_fee-0.jpg");
+        putVictory("samurai", "viking", "/images/heroes/lucid-origin_pixel_art_16-bit_samurai_holding_viking_head_by_hair_dead_berserker_body_broken_-0.jpg");
+        putVictory("samurai", "mongol", "/images/heroes/lucid-origin_pixel_art_16-bit_samurai_standing_over_dead_mongol_horse_archer_holding_mongol_b-0.jpg");
+        putVictory("samurai", "arabian", "/images/heroes/lucid-origin_pixel_art_16-bit_samurai_holding_arabian_head_dead_desert_warrior_broken_scimita-0.jpg");
+        putVictory("samurai", "aztec", "/images/heroes/lucid-origin_pixel_art_16-bit_samurai_holding_aztec_jaguar_helmet_trophy_dead_jaguar_warrior_-0.jpg");
 
-        victoryImages.put("VIKING_KNIGHTS", "/images/heroes/viking_vs_knights_win.png");
-        victoryImages.put("VIKING_SAMURAI", "/images/heroes/viking_vs_samurais_win.png");
-        victoryImages.put("VIKING_MONGOL", "/images/heroes/viking_vs_mongols_win.png");
-        victoryImages.put("VIKING_ARABIAN", "/images/heroes/viking_vs_arabians_win.png");
-        victoryImages.put("VIKING_AZTEC", "/images/heroes/viking_vs_aztecs_win.png");
+        // Викинги
+        putVictory("viking", "knight", "/images/heroes/lucid-origin_pixel_art_16-bit_viking_holding_knight_helmet_with_head_inside_dead_knight_in_ar-0.jpg");
+        putVictory("viking", "samurai", "/images/heroes/lucid-origin_pixel_art_16-bit_viking_holding_samurai_head_dead_samurai_body_broken_katana_nor-0.jpg");
+        putVictory("viking", "mongol", "/images/heroes/lucid-origin_pixel_art_16-bit_viking_holding_mongol_head_dead_horse_archer_broken_bow_frozen_-0.jpg");
+        putVictory("viking", "arabian", "/images/heroes/lucid-origin_pixel_art_16-bit_viking_holding_arabian_head_dead_desert_warrior_oasis_turned_re-0.jpg");
+        putVictory("viking", "aztec", "/images/heroes/lucid-origin_pixel_art_16-bit_viking_holding_aztec_priest_head_dead_jaguar_warrior_pyramid_ba-0.jpg");
 
-        victoryImages.put("MONGOL_KNIGHTS", "/images/heroes/mongol_vs_knights_win.png");
-        victoryImages.put("MONGOL_SAMURAI", "/images/heroes/mongol_vs_samurais_win.png");
-        victoryImages.put("MONGOL_VIKING", "/images/heroes/mongol_vs_vikings_win.png");
-        victoryImages.put("MONGOL_ARABIAN", "/images/heroes/mongol_vs_arabians_win.png");
-        victoryImages.put("MONGOL_AZTEC", "/images/heroes/mongol_vs_aztecs_win.png");
+        // Монголы
+        putVictory("mongol", "knight", "/images/heroes/lucid-origin_pixel_art_16-bit_mongol_warrior_holding_knight_helmet_with_head_dead_knight_brok-0.jpg");
+        putVictory("mongol", "samurai", "/images/heroes/lucid-origin_pixel_art_16-bit_mongol_holding_samurai_head_dead_samurai_broken_katana_steppe_w-0.jpg");
+        putVictory("mongol", "viking", "/images/heroes/lucid-origin_pixel_art_16-bit_mongol_holding_viking_head_dead_berserker_broken_axe_frozen_ste-0.jpg");
+        putVictory("mongol", "arabian", "/images/heroes/lucid-origin_pixel_art_16-bit_mongol_holding_arabian_head_dead_desert_warrior_broken_scimitar-0.jpg");
+        putVictory("mongol", "aztec", "/images/heroes/lucid-origin_pixel_art_16-bit_mongol_holding_aztec_head_dead_jaguar_warrior_pyramid_in_distan-0.jpg");
+
+        // Универсальная победа
+        victoryImages.put("universal", "/images/heroes/lucid-origin_pixel_art_16-bit_victorious_warrior_holding_severed_enemy_head_dead_bodies_aroun-0.jpg");
     }
 
     private void initDefeatImages() {
-        defeatImages.put("KNIGHT", "/images/heroes/knight_defeat.png");
-        defeatImages.put("SAMURAI", "/images/heroes/samurai_defeat.png");
-        defeatImages.put("VIKING", "/images/heroes/viking_defeat.png");
-        defeatImages.put("MONGOL", "/images/heroes/mongol_defeat.png");
-        defeatImages.put("ARABIAN", "/images/heroes/arabian_defeat.png");
-        defeatImages.put("AZTEC", "/images/heroes/aztec_defeat.png");
+        // Временный режим: используем универсальную победу/текст до появления отдельных defeat-артов.
+        defeatImages.put("universal", "/images/heroes/lucid-origin_pixel_art_16-bit_victorious_warrior_holding_severed_enemy_head_dead_bodies_aroun-0.jpg");
     }
 
     public SendPhoto getVictoryImage(String winner, String loser, String chatId) {
-        String key = winner + "_" + loser;
-        String imagePath = victoryImages.getOrDefault(key, "/images/heroes/universal_victory.png");
-        return buildSendPhoto(chatId, imagePath, "🏆 " + winner + " ПОБЕДИЛИ " + loser + "!");
+        String key = normalizeRace(winner) + "_vs_" + normalizeRace(loser) + "_win";
+        String imagePath = victoryImages.getOrDefault(key, victoryImages.get("universal"));
+        return buildSendPhoto(chatId, imagePath, "🏆 ПОБЕДА!");
     }
 
     public SendPhoto getDefeatImage(String race, String chatId) {
-        String imagePath = defeatImages.getOrDefault(race, "/images/heroes/universal_defeat.png");
+        String key = normalizeRace(race) + "_defeat";
+        String imagePath = defeatImages.getOrDefault(key, defeatImages.get("universal"));
+        if (!defeatImages.containsKey(key)) {
+            log.warn("Нет отдельной defeat-картинки для {}. Использую универсальную.", key);
+        }
         return buildSendPhoto(chatId, imagePath, "💔 ВАША АРМИЯ РАЗГРОМЛЕНА...");
     }
 
     public SendPhoto getUniversalVictory(String chatId) {
-        return buildSendPhoto(chatId, "/images/heroes/universal_victory.png", "🏆 ПОБЕДА!");
+        return buildSendPhoto(chatId, victoryImages.get("universal"), "🏆 ПОБЕДА!");
     }
 
     public SendPhoto getUniversalDefeat(String chatId) {
-        return buildSendPhoto(chatId, "/images/heroes/universal_defeat.png", "💔 ПОРАЖЕНИЕ...");
+        return buildSendPhoto(chatId, defeatImages.get("universal"), "💔 ПОРАЖЕНИЕ...");
     }
 
     public SendPhoto getArtifactImage(String chatId, String artifactName) {
-        return buildSendPhoto(chatId, "/images/heroes/universal_victory.png", "💎 Найден артефакт: " + artifactName);
+        return buildSendPhoto(chatId, victoryImages.get("universal"), "💎 Найден артефакт: " + artifactName);
     }
 
     private SendPhoto buildSendPhoto(String chatId, String imagePath, String caption) {
-        InputStream imageStream = getClass().getResourceAsStream(imagePath);
-        if (imageStream == null) {
-            log.error("❌ КАРТИНКА НЕ НАЙДЕНА: {}", imagePath);
+        String normalizedPath = imagePath == null ? "" : (imagePath.startsWith("/") ? imagePath.substring(1) : imagePath);
+        ClassLoader classLoader = getClass().getClassLoader();
+        try (InputStream imageStream = classLoader.getResourceAsStream(normalizedPath)) {
+            if (imageStream == null) {
+                log.error("❌ КАРТИНКА НЕ НАЙДЕНА: {}", imagePath);
+                return null;
+            }
+            byte[] bytes = imageStream.readAllBytes();
+            if (bytes.length == 0) {
+                log.error("❌ КАРТИНКА ПУСТАЯ: {}", imagePath);
+                return null;
+            }
+            String fileName = normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1);
+            InputFile inputFile = new InputFile(new ByteArrayInputStream(bytes), fileName);
+            SendPhoto sendPhoto = new SendPhoto();
+            sendPhoto.setChatId(chatId);
+            sendPhoto.setPhoto(inputFile);
+            sendPhoto.setCaption(caption);
+            return sendPhoto;
+        } catch (Exception e) {
+            log.error("❌ Ошибка загрузки картинки {}: {}", imagePath, e.getMessage(), e);
             return null;
         }
-        InputFile inputFile = new InputFile(imageStream, imagePath.substring(imagePath.lastIndexOf('/') + 1));
-        SendPhoto sendPhoto = new SendPhoto();
-        sendPhoto.setChatId(chatId);
-        sendPhoto.setPhoto(inputFile);
-        sendPhoto.setCaption(caption);
-        return sendPhoto;
+    }
+
+    private String normalizeRace(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String s = raw.toLowerCase(Locale.ROOT).trim();
+        return switch (s) {
+            case "knights", "knight", "рыцари", "рыцарь" -> "knight";
+            case "samurais", "samurai", "самураи", "самурай" -> "samurai";
+            case "vikings", "viking", "викинги", "викинг" -> "viking";
+            case "mongols", "mongol", "монголы", "монгол" -> "mongol";
+            case "arabians", "arabian", "desert_dwellers", "пустынники", "пустынник" -> "arabian";
+            case "aztecs", "aztec", "ацтеки", "ацтек" -> "aztec";
+            default -> s;
+        };
+    }
+
+    public SendPhoto testImage(String chatId) {
+        return getVictoryImage("AZTEC", "KNIGHT", chatId);
+    }
+
+    private void putVictory(String winner, String loser, String path) {
+        victoryImages.put(winner + "_vs_" + loser + "_win", path);
     }
 }

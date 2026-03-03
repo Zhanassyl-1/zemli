@@ -4142,14 +4142,14 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private void sendBattleSummaryMedia(long chatId, boolean won, Faction playerFaction, Faction enemyFaction, String details) {
         try {
             if (won) {
-                SendPhoto victory = imageService.getUniversalVictory(String.valueOf(chatId));
+                SendPhoto victory = imageService.getVictoryImage(raceImageKey(playerFaction), raceImageKey(enemyFaction), String.valueOf(chatId));
                 if (victory != null) {
                     execute(victory);
                 } else {
                     sendText(chatId, "🏆 ПОБЕДА!");
                 }
             } else {
-                SendPhoto defeat = imageService.getUniversalDefeat(String.valueOf(chatId));
+                SendPhoto defeat = imageService.getDefeatImage(raceImageKey(playerFaction), String.valueOf(chatId));
                 if (defeat != null) {
                     execute(defeat);
                 } else {
