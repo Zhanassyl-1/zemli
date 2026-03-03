@@ -1,5 +1,7 @@
 package com.zemli.bot.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
@@ -10,6 +12,7 @@ import java.util.Map;
 
 @Service
 public class ImageService {
+    private static final Logger log = LoggerFactory.getLogger(ImageService.class);
 
     private final Map<String, String> victoryImages = new HashMap<>();
     private final Map<String, String> defeatImages = new HashMap<>();
@@ -92,10 +95,8 @@ public class ImageService {
     private SendPhoto buildSendPhoto(String chatId, String imagePath, String caption) {
         InputStream imageStream = getClass().getResourceAsStream(imagePath);
         if (imageStream == null) {
-            imageStream = getClass().getResourceAsStream("/images/heroes/universal_victory.png");
-            if (imageStream == null) {
-                throw new IllegalStateException("Image not found in resources: " + imagePath);
-            }
+            log.error("❌ КАРТИНКА НЕ НАЙДЕНА: {}", imagePath);
+            return null;
         }
         InputFile inputFile = new InputFile(imageStream, imagePath.substring(imagePath.lastIndexOf('/') + 1));
         SendPhoto sendPhoto = new SendPhoto();

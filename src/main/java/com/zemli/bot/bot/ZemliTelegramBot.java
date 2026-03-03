@@ -460,6 +460,27 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             sendText(chatId, "Chat ID: " + chatId + "\nUser ID: " + tgId);
             return;
         }
+        if ("/testimage".equalsIgnoreCase(commandToken)) {
+            String mode = "win";
+            String[] parts = text.trim().split("\\s+");
+            if (parts.length >= 2) {
+                mode = parts[1].toLowerCase();
+            }
+            try {
+                SendPhoto photo = "lose".equals(mode)
+                        ? imageService.getUniversalDefeat(String.valueOf(chatId))
+                        : imageService.getUniversalVictory(String.valueOf(chatId));
+                if (photo != null) {
+                    execute(photo);
+                } else {
+                    sendText(chatId, "❌ Картинка не найдена. Отправляю текст: " + ("lose".equals(mode) ? "ПОРАЖЕНИЕ" : "ПОБЕДА"));
+                }
+            } catch (Exception e) {
+                log.error("Failed /testimage: {}", e.getMessage(), e);
+                sendText(chatId, "❌ Ошибка отправки картинки. Проверь resources/images/heroes");
+            }
+            return;
+        }
 
         if (isPrivate && isAdminCommand(commandToken)) {
             if (!isAdmin(message)) {
@@ -4121,12 +4142,23 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private void sendBattleSummaryMedia(long chatId, boolean won, Faction playerFaction, Faction enemyFaction, String details) {
         try {
             if (won) {
-                handleVictory(String.valueOf(chatId), raceImageKey(playerFaction), raceImageKey(enemyFaction));
+                SendPhoto victory = imageService.getUniversalVictory(String.valueOf(chatId));
+                if (victory != null) {
+                    execute(victory);
+                } else {
+                    sendText(chatId, "🏆 ПОБЕДА!");
+                }
             } else {
-                handleDefeat(String.valueOf(chatId), raceImageKey(playerFaction));
+                SendPhoto defeat = imageService.getUniversalDefeat(String.valueOf(chatId));
+                if (defeat != null) {
+                    execute(defeat);
+                } else {
+                    sendText(chatId, "💔 ПОРАЖЕНИЕ...");
+                }
             }
         } catch (Exception e) {
             log.warn("Failed to send battle image: {}", e.getMessage());
+            sendText(chatId, won ? "🏆 ПОБЕДА!" : "💔 ПОРАЖЕНИЕ...");
         }
         String caption = (won ? "🏆 ПОБЕДА!\n" : "💀 ПОРАЖЕНИЕ...\n") + details;
         sendTextRaw(chatId, caption, null);
@@ -4145,17 +4177,29 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private void handleVictory(String chatId, String winnerRace, String loserRace) throws Exception {
         SendPhoto victoryPhoto = imageService.getVictoryImage(winnerRace, loserRace, chatId);
-        execute(victoryPhoto);
+        if (victoryPhoto != null) {
+            execute(victoryPhoto);
+        } else {
+            sendText(Long.parseLong(chatId), "🏆 ПОБЕДА!");
+        }
     }
 
     private void handleDefeat(String chatId, String playerRace) throws Exception {
         SendPhoto defeatPhoto = imageService.getDefeatImage(playerRace, chatId);
-        execute(defeatPhoto);
+        if (defeatPhoto != null) {
+            execute(defeatPhoto);
+        } else {
+            sendText(Long.parseLong(chatId), "💔 ПОРАЖЕНИЕ...");
+        }
     }
 
     private void handleArtifactFound(String chatId, String artifactName) throws Exception {
         SendPhoto artifactPhoto = imageService.getArtifactImage(chatId, artifactName);
-        execute(artifactPhoto);
+        if (artifactPhoto != null) {
+            execute(artifactPhoto);
+        } else {
+            sendText(Long.parseLong(chatId), "💎 Найден артефакт: " + artifactName);
+        }
     }
 
     private void sendCityLevelUpMedia(long chatId, int newCityLevel) {

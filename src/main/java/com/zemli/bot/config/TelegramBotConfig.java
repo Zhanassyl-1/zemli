@@ -136,7 +136,8 @@ public class TelegramBotConfig {
                         .commands(List.of(
                                 new BotCommand("/start", "🚀 Начать игру"),
                                 new BotCommand("/help", "📋 Помощь"),
-                                new BotCommand("/getid", "🆔 Показать ID")
+                                new BotCommand("/getid", "🆔 Показать ID"),
+                                new BotCommand("/testimage", "🖼️ Тест картинки")
                         ))
                         .build());
                 log.info("Bot commands registered for group/private scopes");
