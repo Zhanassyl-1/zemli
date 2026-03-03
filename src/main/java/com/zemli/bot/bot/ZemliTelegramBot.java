@@ -9,8 +9,11 @@ import com.zemli.bot.model.KeyValueAmount;
 import com.zemli.bot.model.PlayerRecord;
 import com.zemli.bot.model.ResourcesRecord;
 import com.zemli.bot.service.GameCatalog;
+import com.zemli.bot.service.Hero;
+import com.zemli.bot.service.BattleSystem;
 import com.zemli.bot.service.MenuService;
 import com.zemli.bot.service.RegistrationService;
+import com.zemli.bot.service.Tactics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.task.TaskExecutor;
@@ -35,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -95,6 +99,9 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private final Map<Long, String> pendingLootByPlayer = new ConcurrentHashMap<>();
     private final AtomicLong allianceAttackSeq = new AtomicLong(1);
     private final Map<Long, AllianceAttackSession> allianceAttackSessions = new ConcurrentHashMap<>();
+    private final Map<Long, Tactics> attackerTacticsByBattle = new ConcurrentHashMap<>();
+    private final Map<Long, Tactics> defenderTacticsByBattle = new ConcurrentHashMap<>();
+    private final BattleSystem battleSystem = new BattleSystem();
 
     public ZemliTelegramBot(
             String botToken,
@@ -1454,20 +1461,15 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     }
 
     private String factionFinalMessage(Faction faction) {
-        String tip = switch (faction) {
-            case KNIGHTS -> "Держи оборону и накапливай тяжёлую армию перед рывком.";
-            case SAMURAI -> "Ищи ранние дуэли: твой ближний бой раскрывается быстрее других.";
-            case VIKINGS -> "Играй агрессивно и чаще ходи в набеги, пока враги слабы.";
-            case MONGOLS -> "Твоя сила в темпе: атакуй чаще и не затягивай войны.";
-            case DESERT_DWELLERS -> "Дави количеством: дешёвые юниты дают стабильный перевес.";
-            case AZTECS -> "Разгоняй манну раньше остальных и усиливай магические отряды.";
-        };
-        return "🎉 Отличный выбор!\n\n" +
-                "Ты — " + faction.getTitle() + "\n" +
-                "Твои воины уже ждут приказа.\n\n" +
-                "Помни:\n" +
-                tip + "\n\n" +
-                "Удачи в завоеваниях, правитель! ⚔️";
+        return "ДОСТУПНЫЕ РЕСУРСЫ:\n" +
+                "🪵 Дерево: 200\n" +
+                "🪨 Камень: 150\n" +
+                "🌾 Еда: 200\n" +
+                "⚔️ Железо: 0\n" +
+                "💰 Золото: 50\n" +
+                "🧪 Манна: 0\n" +
+                "🍺 Алкоголь: 0\n\n" +
+                "Используй /город чтобы строить и развиваться";
     }
 
     private String factionEmoji(Faction faction) {
@@ -1995,11 +1997,9 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
         if ("accept".equals(p[1])) {
-            gameDao.setBattleStatus(b.id(), "WAITING_ACTIONS");
-            gameDao.startBattleRound(b.id(), 1, Instant.now().toEpochMilli());
-            sendText(defender.get().telegramId(), "✅ Бой принят. Начинаем!");
-            sendText(attacker.get().telegramId(), "✅ " + defender.get().villageName() + " принял вызов.");
-            sendRoundPrompt(b.id());
+            gameDao.setBattleStatus(b.id(), "WAITING_TACTICS");
+            sendText(defender.get().telegramId(), "✅ Бой принят. Выбери тактику:", tacticsKeyboard(b.id()));
+            sendText(attacker.get().telegramId(), "✅ " + defender.get().villageName() + " принял вызов. Выбери тактику:", tacticsKeyboard(b.id()));
             return;
         }
         if ("decline".equals(p[1])) {
@@ -2025,6 +2025,30 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         if (!attackerSide && b.defenderId() != player.id()) {
             return;
         }
+
+        if ("tactic".equals(p[1]) && p.length >= 4) {
+            Tactics tactic = Tactics.fromKey(p[3]);
+            if (tactic != Tactics.NONE && !gameDao.spendResources(player.id(), tactic.cost())) {
+                sendText(chatId, "Недостаточно ресурсов для тактики: " + tactic.title());
+                return;
+            }
+            if (attackerSide) {
+                attackerTacticsByBattle.put(battleId, tactic);
+            } else {
+                defenderTacticsByBattle.put(battleId, tactic);
+            }
+            sendText(chatId, "✅ Тактика выбрана: " + tactic.title());
+
+            Tactics aT = attackerTacticsByBattle.get(battleId);
+            Tactics dT = defenderTacticsByBattle.get(battleId);
+            if (aT != null && dT != null) {
+                executeStrategicBattle(battleId);
+            } else {
+                sendText(chatId, "⏳ Ожидаем выбор тактики соперника...");
+            }
+            return;
+        }
+
         if (!"WAITING_ACTIONS".equals(b.status()) || b.currentRound() <= 0) {
             sendText(chatId, "Этот бой уже завершён/не активен");
             return;
@@ -2120,6 +2144,125 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             rows.add(List.of(btn("🍺 Использовать предмет", "battle:act:" + battleId + ":ITEM")));
         }
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private InlineKeyboardMarkup tacticsKeyboard(long battleId) {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        rows.add(List.of(btn("🏹 Засада (🧪20)", "battle:tactic:" + battleId + ":AMBUSH")));
+        rows.add(List.of(btn("🛡️ Фаланга (🪨50)", "battle:tactic:" + battleId + ":PHALANX")));
+        rows.add(List.of(btn("⚡ Стремительная (🍺30)", "battle:tactic:" + battleId + ":SWIFT")));
+        rows.add(List.of(btn("🔥 Поджог (🧪30+🍺20)", "battle:tactic:" + battleId + ":ARSON")));
+        rows.add(List.of(btn("💀 Отравление (🧪40)", "battle:tactic:" + battleId + ":POISON")));
+        rows.add(List.of(btn("🏃 Ложное отступление (🍺50)", "battle:tactic:" + battleId + ":FEIGNED_RETREAT")));
+        rows.add(List.of(btn("🌙 Ночная атака (🧪25)", "battle:tactic:" + battleId + ":NIGHT_ATTACK")));
+        rows.add(List.of(btn("➡️ Без тактики", "battle:tactic:" + battleId + ":NONE")));
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private void executeStrategicBattle(long battleId) {
+        Optional<BattleRecord> bOpt = gameDao.findBattle(battleId);
+        if (bOpt.isEmpty()) {
+            return;
+        }
+        BattleRecord b = bOpt.get();
+        Optional<PlayerRecord> aOpt = gameDao.findPlayerById(b.attackerId());
+        Optional<PlayerRecord> dOpt = gameDao.findPlayerById(b.defenderId());
+        if (aOpt.isEmpty() || dOpt.isEmpty()) {
+            return;
+        }
+        PlayerRecord attacker = aOpt.get();
+        PlayerRecord defender = dOpt.get();
+        Tactics aTactic = attackerTacticsByBattle.getOrDefault(battleId, Tactics.NONE);
+        Tactics dTactic = defenderTacticsByBattle.getOrDefault(battleId, Tactics.NONE);
+        Hero aHero = resolveBestHero(attacker);
+        Hero dHero = resolveBestHero(defender);
+
+        BattleSystem.BattleInput input = new BattleSystem.BattleInput(
+                attacker.faction(),
+                defender.faction(),
+                gameDao.loadArmy(attacker.id()),
+                gameDao.loadArmy(defender.id()),
+                aTactic,
+                dTactic,
+                aHero,
+                dHero
+        );
+        BattleSystem.BattleResult result = battleSystem.run(input);
+
+        List<GameDao.ArmyLoss> attackerLosses = gameDao.applyUnitLosses(attacker.id(), result.attackerResult().lostUnits());
+        List<GameDao.ArmyLoss> defenderLosses = gameDao.applyUnitLosses(defender.id(), result.defenderResult().lostUnits());
+
+        PlayerRecord winner = result.attackerWon() ? attacker : defender;
+        PlayerRecord loser = result.attackerWon() ? defender : attacker;
+        gameDao.changeMorale(winner.id(), 10);
+        gameDao.changeMorale(loser.id(), -15);
+
+        ResourcesRecord before = gameDao.loadResources(loser.id());
+        int stolenWood = (int) Math.floor(before.wood() * 0.30);
+        int stolenStone = (int) Math.floor(before.stone() * 0.30);
+        int stolenFood = (int) Math.floor(before.food() * 0.30);
+        int stolenIron = (int) Math.floor(before.iron() * 0.30);
+        int stolenGold = (int) Math.floor(before.gold() * 0.30);
+        int stolenMana = (int) Math.floor(before.mana() * 0.30);
+        int stolenAlcohol = (int) Math.floor(before.alcohol() * 0.30);
+        GameCatalog.Cost loot = new GameCatalog.Cost(stolenWood, stolenStone, stolenFood, stolenIron, stolenGold, stolenMana, stolenAlcohol);
+        if (gameDao.spendResources(loser.id(), loot)) {
+            gameDao.addResources(winner.id(), loot);
+        }
+
+        String fullLog = result.roundLog().stream().collect(Collectors.joining("\n")) +
+                "\n\n🏆 Победитель: " + winner.villageName() +
+                "\n💰 Добыча: 🪵" + stolenWood + " 🪨" + stolenStone + " 🌾" + stolenFood + " ⚔️" + stolenIron + " 💰" + stolenGold +
+                "\nПотери " + attacker.villageName() + ": " + formatLosses(attacker, attackerLosses) +
+                "\nПотери " + defender.villageName() + ": " + formatLosses(defender, defenderLosses);
+
+        gameDao.finishBattle(battleId, fullLog);
+        gameDao.logBattle(
+                attacker.id(),
+                defender.id(),
+                getPlayerPower(attacker.id()),
+                getPlayerPower(defender.id()),
+                winner.id(),
+                stolenGold
+        );
+        gameDao.appendDailyLog("BATTLE", attacker.villageName() + " vs " + defender.villageName() + " -> победа " + winner.villageName());
+
+        sendText(attacker.telegramId(), fullLog);
+        sendText(defender.telegramId(), fullLog);
+
+        attackerTacticsByBattle.remove(battleId);
+        defenderTacticsByBattle.remove(battleId);
+    }
+
+    private Hero resolveBestHero(PlayerRecord player) {
+        Hero best = null;
+        for (KeyValueAmount item : gameDao.loadInventory(player.id())) {
+            Hero h = Hero.byKey(item.type());
+            if (h == null || item.quantity() <= 0) {
+                continue;
+            }
+            if (h.faction() != player.faction()) {
+                continue;
+            }
+            if (best == null || h.rarityRank() > best.rarityRank()) {
+                best = h;
+            }
+        }
+        return best;
+    }
+
+    private String formatLosses(PlayerRecord player, List<GameDao.ArmyLoss> losses) {
+        if (losses == null || losses.isEmpty()) {
+            return "0";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (GameDao.ArmyLoss loss : losses) {
+            GameCatalog.UnitSpec unit = catalog.unitByKey(player.faction(), loss.unitType());
+            String title = unit == null ? loss.unitType() : unit.title();
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(title).append(" -").append(loss.lost());
+        }
+        return sb.toString();
     }
 
     private void processBattleRound(long battleId) {

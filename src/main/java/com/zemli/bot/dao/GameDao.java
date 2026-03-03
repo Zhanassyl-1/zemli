@@ -17,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -435,6 +436,35 @@ public class GameDao {
             losses.add(new ArmyLoss(unit.type(), lost));
         }
         return losses;
+    }
+
+    public List<ArmyLoss> applyUnitLosses(long playerId, Map<String, Integer> lossesByUnit) {
+        if (lossesByUnit == null || lossesByUnit.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<ArmyLoss> applied = new ArrayList<>();
+        for (Map.Entry<String, Integer> e : lossesByUnit.entrySet()) {
+            int loss = Math.max(0, e.getValue());
+            if (loss <= 0) {
+                continue;
+            }
+            Integer current = jdbcTemplate.queryForObject(
+                    "SELECT quantity FROM army WHERE player_id = ? AND unit_type = ?",
+                    Integer.class,
+                    playerId, e.getKey()
+            );
+            int have = current == null ? 0 : Math.max(0, current);
+            int realLoss = Math.min(have, loss);
+            if (realLoss <= 0) {
+                continue;
+            }
+            jdbcTemplate.update(
+                    "UPDATE army SET quantity = quantity - ? WHERE player_id = ? AND unit_type = ?",
+                    realLoss, playerId, e.getKey()
+            );
+            applied.add(new ArmyLoss(e.getKey(), realLoss));
+        }
+        return applied;
     }
 
     public boolean hasInventoryItem(long playerId, String itemType) {
