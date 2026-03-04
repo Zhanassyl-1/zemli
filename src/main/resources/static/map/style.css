@@ -65,6 +65,62 @@ h1 { position: absolute; top: 10px; left: 10px; z-index: 100; color: white; }
     color: #aaddff;
 }
 
+.controls {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    gap: 10px;
+    z-index: 1000;
+}
+
+.controls button {
+    height: 50px;
+    min-width: 50px;
+    border-radius: 25px;
+    background: rgba(30, 30, 30, 0.9);
+    color: white;
+    border: 2px solid #444;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    font-family: 'Courier New', monospace;
+}
+
+.controls button:hover {
+    background: #444;
+    border-color: #666;
+    transform: scale(1.08);
+}
+
+.controls button#home {
+    background: #4a6a8a;
+    border-color: #6aaaff;
+    width: auto;
+    padding: 0 15px;
+    font-size: 16px;
+}
+
+.controls button#home:hover {
+    background: #5a7a9a;
+}
+
+.home-info {
+    position: fixed;
+    bottom: 60px;
+    left: 20px;
+    color: #FFD700;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 5px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    z-index: 1000;
+    border: 1px solid #FFD700;
+    min-height: 30px;
+}
+
 @media (max-width: 768px) {
     .build-panel {
         left: 10px;
@@ -110,5 +166,22 @@ h1 { position: absolute; top: 10px; left: 10px; z-index: 100; color: white; }
         bottom: 80px;
         left: 10px;
         font-size: 12px;
+    }
+
+    .controls {
+        bottom: 20px;
+        right: 10px;
+        gap: 8px;
+    }
+
+    .controls button {
+        height: 42px;
+        min-width: 42px;
+        font-size: 20px;
+    }
+
+    .home-info {
+        bottom: 120px;
+        left: 10px;
     }
 }

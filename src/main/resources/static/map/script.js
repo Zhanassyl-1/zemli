@@ -26,6 +26,8 @@ const API_BASE = window.location.hostname === 'zhanassyl-1.github.io'
 const TELEGRAM_USER_ID = Number(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 0);
 let selectedBuilding = null;
 let loadedBuildings = [];
+let homeX = 0;
+let homeY = 0;
 
 const BIOME = {
   OCEAN: 0,
@@ -65,6 +67,12 @@ const BUILDING_ICONS = {
 
 function normalizeBuildingType(rawType) {
   return (rawType || '').toLowerCase();
+}
+
+function setHome(x, y) {
+  homeX = x;
+  homeY = y;
+  console.log(`🏠 Дом установлен на (${x}, ${y})`);
 }
 
 function idx(x, y) {
@@ -276,6 +284,26 @@ function drawMap(ctx, canvas) {
       ctx.fillRect(x, y, tile + 1, tile + 1);
     }
   }
+
+  if (homeX !== 0 || homeY !== 0) {
+    const screenX = ((homeX + CENTER_X) * TILE_SIZE * scale) - cameraX;
+    const screenY = ((homeY + CENTER_Y) * TILE_SIZE * scale) - cameraY;
+    ctx.font = `${TILE_SIZE * scale * 1.5}px 'Courier New'`;
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText('🏰', screenX, screenY + TILE_SIZE * scale);
+
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(
+      screenX + TILE_SIZE * scale / 2,
+      screenY + TILE_SIZE * scale / 2,
+      TILE_SIZE * scale,
+      0,
+      Math.PI * 2
+    );
+    ctx.stroke();
+  }
 }
 
 function drawBuildings(ctx) {
@@ -346,6 +374,10 @@ window.onload = function () {
       const response = await fetch(`${API_BASE}/api/buildings?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}`);
       if (!response.ok) return;
       loadedBuildings = await response.json();
+      if (homeX === 0 && homeY === 0) {
+        const capitol = loadedBuildings.find(b => normalizeBuildingType(b.type) === 'capitol');
+        if (capitol) setHome(capitol.x, capitol.y);
+      }
     } catch (error) {
       console.error('Не удалось загрузить постройки:', error);
     }
@@ -487,6 +519,9 @@ window.onload = function () {
       }
 
       console.log(`✅ Построено ${selectedBuilding} на (${tileX}, ${tileY})`);
+      if (selectedBuilding === 'capitol') {
+        setHome(tileX, tileY);
+      }
       document.querySelectorAll('.build-btn').forEach(b => b.classList.remove('selected'));
       selectedBuilding = null;
       if (selectedInfo) selectedInfo.textContent = 'Выбрано: —';
@@ -498,13 +533,20 @@ window.onload = function () {
 
   const zoomIn = document.getElementById('zoomIn');
   const zoomOut = document.getElementById('zoomOut');
-  const center = document.getElementById('center');
+  const home = document.getElementById('home');
+  const homeInfo = document.getElementById('homeInfo');
 
   if (zoomIn) zoomIn.onclick = () => { scale *= 1.4; };
   if (zoomOut) zoomOut.onclick = () => { scale /= 1.4; };
-  if (center) center.onclick = () => {
-    cameraX = CENTER_X * TILE_SIZE - window.innerWidth / 2;
-    cameraY = CENTER_Y * TILE_SIZE - window.innerHeight / 2;
+  if (home) home.onclick = () => {
+    cameraX = (homeX + CENTER_X) * TILE_SIZE * scale - window.innerWidth / 2;
+    cameraY = (homeY + CENTER_Y) * TILE_SIZE * scale - window.innerHeight / 2;
+    if (homeInfo) {
+      homeInfo.textContent = `🏰 Дом: (${homeX}, ${homeY})`;
+      setTimeout(() => {
+        homeInfo.textContent = '';
+      }, 2000);
+    }
   };
 
   loadBuildings();
