@@ -146,6 +146,16 @@ CREATE TABLE IF NOT EXISTS server_state (
     updated_at BIGINT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS map_buildings (
+    id BIGSERIAL PRIMARY KEY,
+    owner_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    x INTEGER NOT NULL,
+    y INTEGER NOT NULL,
+    building_type TEXT NOT NULL,
+    built_at BIGINT NOT NULL,
+    UNIQUE(owner_id, x, y)
+);
+
 CREATE INDEX IF NOT EXISTS idx_players_telegram_id ON players(telegram_id);
 CREATE INDEX IF NOT EXISTS idx_army_player ON army(player_id);
 CREATE INDEX IF NOT EXISTS idx_resources_player ON resources(player_id);
@@ -160,3 +170,4 @@ CREATE INDEX IF NOT EXISTS idx_player_state_key ON player_state(state_key);
 CREATE INDEX IF NOT EXISTS idx_alliance_members_alliance ON alliance_members(alliance_id);
 CREATE INDEX IF NOT EXISTS idx_alliance_invites_player ON alliance_invites(invited_player_id);
 CREATE INDEX IF NOT EXISTS idx_trade_offers_status_expires ON trade_offers(status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_map_buildings_area ON map_buildings(x, y);

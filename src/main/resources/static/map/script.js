@@ -19,6 +19,14 @@ if (tg) {
   console.log("✅ Telegram WebApp активен");
 }
 
+const API_BASE = window.location.hostname === 'zhanassyl-1.github.io'
+  ? 'https://zemli.railway.app'
+  : '';
+
+const TELEGRAM_USER_ID = Number(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 0);
+let selectedBuilding = null;
+let loadedBuildings = [];
+
 const BIOME = {
   OCEAN: 0,
   SHALLOW: 1,
@@ -43,6 +51,21 @@ const COLORS = {
 
 const biomeMap = new Uint8Array(MAP_WIDTH * MAP_HEIGHT);
 const elevationMap = new Float32Array(MAP_WIDTH * MAP_HEIGHT);
+
+const BUILDING_ICONS = {
+  capitol: '🏰',
+  lumber: '🪓',
+  mine: '⛏️',
+  farm: '🌾',
+  barracks: '⚔️',
+  wall: '🧱',
+  tower: '🗼',
+  gold: '💰'
+};
+
+function normalizeBuildingType(rawType) {
+  return (rawType || '').toLowerCase();
+}
 
 function idx(x, y) {
   return y * MAP_WIDTH + x;
@@ -247,6 +270,31 @@ function drawMap(ctx, canvas) {
   }
 }
 
+function drawBuildings(ctx) {
+  const tile = TILE_SIZE * scale;
+  if (tile <= 0.01 || !loadedBuildings.length) return;
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `${Math.max(12, Math.floor(tile * 0.55))}px "Courier New", monospace`;
+
+  for (const building of loadedBuildings) {
+    const worldX = building.x + CENTER_X;
+    const worldY = building.y + CENTER_Y;
+    if (worldX < 0 || worldX >= MAP_WIDTH || worldY < 0 || worldY >= MAP_HEIGHT) continue;
+
+    const drawX = worldX * tile - cameraX;
+    const drawY = worldY * tile - cameraY;
+    if (drawX + tile < 0 || drawY + tile < 0 || drawX > window.innerWidth || drawY > window.innerHeight) continue;
+
+    const type = normalizeBuildingType(building.type);
+    const icon = BUILDING_ICONS[type] || '🏗️';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.fillRect(drawX + 2, drawY + 2, tile - 4, tile - 4);
+    ctx.fillText(icon, drawX + tile / 2, drawY + tile / 2);
+  }
+}
+
 window.onload = function () {
   console.log('🎮 Starting world generation...');
   const threshold = generateElevationAndThreshold();
@@ -256,6 +304,44 @@ window.onload = function () {
   const ctx = canvas.getContext('2d');
   const biomeInfo = document.getElementById('biomeInfo');
   const coordsEl = document.getElementById('coords');
+  const selectedInfo = document.getElementById('selectedBuilding');
+
+  document.querySelectorAll('.build-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.build-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedBuilding = btn.dataset.type;
+      if (selectedInfo) selectedInfo.textContent = `Выбрано: ${btn.textContent}`;
+    });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('.build-btn').forEach(b => b.classList.remove('selected'));
+    selectedBuilding = null;
+    if (selectedInfo) selectedInfo.textContent = 'Выбрано: —';
+  });
+
+  async function loadBuildings() {
+    const tile = TILE_SIZE * scale;
+    const startCol = Math.floor(cameraX / tile) - 2;
+    const startRow = Math.floor(cameraY / tile) - 2;
+    const endCol = startCol + Math.ceil(canvas.width / tile) + 4;
+    const endRow = startRow + Math.ceil(canvas.height / tile) + 4;
+
+    const x1 = startCol - CENTER_X;
+    const y1 = startRow - CENTER_Y;
+    const x2 = endCol - CENTER_X;
+    const y2 = endRow - CENTER_Y;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/buildings?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}`);
+      if (!response.ok) return;
+      loadedBuildings = await response.json();
+    } catch (error) {
+      console.error('Не удалось загрузить постройки:', error);
+    }
+  }
 
   function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -322,6 +408,50 @@ window.onload = function () {
     cameraY = (worldY * TILE_SIZE * scale) - mouseY;
   });
 
+  canvas.addEventListener('click', async (e) => {
+    if (!selectedBuilding) return;
+    if (!TELEGRAM_USER_ID) {
+      alert('❌ Не удалось определить Telegram userId');
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const worldX = (mouseX + cameraX) / (TILE_SIZE * scale);
+    const worldY = (mouseY + cameraY) / (TILE_SIZE * scale);
+
+    const tileX = Math.floor(worldX) - CENTER_X;
+    const tileY = Math.floor(worldY) - CENTER_Y;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/build`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: TELEGRAM_USER_ID,
+          x: tileX,
+          y: tileY,
+          type: selectedBuilding,
+          building: selectedBuilding
+        })
+      });
+
+      if (!response.ok) {
+        alert('❌ Нельзя построить здесь');
+        return;
+      }
+
+      console.log(`✅ Построено ${selectedBuilding} на (${tileX}, ${tileY})`);
+      document.querySelectorAll('.build-btn').forEach(b => b.classList.remove('selected'));
+      selectedBuilding = null;
+      if (selectedInfo) selectedInfo.textContent = 'Выбрано: —';
+      await loadBuildings();
+    } catch (error) {
+      console.error('Ошибка строительства:', error);
+    }
+  });
+
   const zoomIn = document.getElementById('zoomIn');
   const zoomOut = document.getElementById('zoomOut');
   const center = document.getElementById('center');
@@ -333,9 +463,13 @@ window.onload = function () {
     cameraY = CENTER_Y * TILE_SIZE - window.innerHeight / 2;
   };
 
+  loadBuildings();
+  setInterval(loadBuildings, 2000);
+
   function animate() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawMap(ctx, canvas);
+    drawBuildings(ctx);
     requestAnimationFrame(animate);
   }
 

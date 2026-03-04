@@ -3,6 +3,8 @@ package com.zemli.bot.controller;
 import com.zemli.bot.dao.GameDao;
 import com.zemli.bot.model.PlayerRecord;
 import com.zemli.bot.service.RegistrationService;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -12,9 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import org.springframework.http.HttpStatus;
 
 @RestController
+@CrossOrigin(origins = "*")
 @RequestMapping("/api")
 public class MapController {
 
@@ -42,12 +44,37 @@ public class MapController {
 
     @PostMapping("/build")
     public ActionResult build(@RequestBody BuildRequest request) {
+        if (request.userId() == null || request.userId() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required");
+        }
         PlayerRecord player = registrationService.findRegistered(request.userId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found for userId=" + request.userId()));
+        String buildingType = normalizeBuildingType(request);
+        if (buildingType == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "building/type is required");
+        }
         gameDao.setPlayerState(player.id(), "LAST_WEB_BUILD_X", request.x());
         gameDao.setPlayerState(player.id(), "LAST_WEB_BUILD_Y", request.y());
         gameDao.setPlayerState(player.id(), "LAST_WEB_BUILD_AT", System.currentTimeMillis());
+        gameDao.setPlayerState(player.id(), "LAST_WEB_BUILD_TYPE_HASH", buildingType.hashCode());
+        gameDao.saveMapBuilding(player.id(), request.x(), request.y(), buildingType);
         return new ActionResult(true, "Команда на строительство отправлена");
+    }
+
+    @GetMapping("/buildings")
+    public List<MapBuildingDto> getBuildings(
+            @RequestParam int x1,
+            @RequestParam int y1,
+            @RequestParam int x2,
+            @RequestParam int y2
+    ) {
+        int minX = Math.min(x1, x2);
+        int maxX = Math.max(x1, x2);
+        int minY = Math.min(y1, y2);
+        int maxY = Math.max(y1, y2);
+        return gameDao.loadMapBuildingsInArea(minX, minY, maxX, maxY).stream()
+                .map(row -> new MapBuildingDto(row.x(), row.y(), row.type(), row.ownerId(), row.builtAt()))
+                .toList();
     }
 
     @PostMapping("/move")
@@ -72,17 +99,30 @@ public class MapController {
         return cells;
     }
 
+    private String normalizeBuildingType(BuildRequest request) {
+        String raw = request.building() != null && !request.building().isBlank()
+                ? request.building()
+                : request.type();
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        return raw.trim().toLowerCase();
+    }
+
     public record MapData(List<MapCellDto> cells) {
     }
 
     public record MapCellDto(int x, int y, String biome, String building, String owner, String resource) {}
 
-    public record BuildRequest(long userId, int x, int y, String building) {
+    public record BuildRequest(Long userId, int x, int y, String building, String type) {
     }
 
     public record MoveRequest(long userId, int x, int y, int units) {
     }
 
     public record ActionResult(boolean success, String message) {
+    }
+
+    public record MapBuildingDto(int x, int y, String type, long ownerId, long builtAt) {
     }
 }

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zemli - Карта мира</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
     <style>
         * {
             margin: 0;
@@ -117,8 +118,21 @@
     </div>
 
     <canvas id="gameCanvas"></canvas>
+    <div class="build-panel">
+        <div class="build-title">🏗️ Постройки</div>
+        <div class="build-buttons">
+            <button class="build-btn" data-type="capitol">🏰 Ратуша</button>
+            <button class="build-btn" data-type="lumber">🪓 Лесопилка</button>
+            <button class="build-btn" data-type="mine">⛏️ Шахта</button>
+            <button class="build-btn" data-type="farm">🌾 Ферма</button>
+            <button class="build-btn" data-type="barracks">⚔️ Казарма</button>
+            <button class="build-btn" data-type="wall">🧱 Стена</button>
+            <button class="build-btn" data-type="tower">🗼 Вышка</button>
+            <button class="build-btn" data-type="gold">💰 Золотая шахта</button>
+        </div>
+        <div class="selected-info" id="selectedBuilding">Выбрано: —</div>
+    </div>
 
     <script src="script.js"></script>
 </body>
 </html>
-

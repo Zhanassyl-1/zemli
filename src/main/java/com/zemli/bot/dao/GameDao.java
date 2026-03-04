@@ -39,6 +39,7 @@ public class GameDao {
     public record Build(long playerId, String buildingType, int level) {}
     public record Point(int x, int y) {}
     public record CapitalPoint(long playerId, int x, int y) {}
+    public record MapBuilding(long ownerId, int x, int y, String type, long builtAt) {}
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -46,6 +47,7 @@ public class GameDao {
         this.jdbcTemplate = jdbcTemplate;
         migrateAllianceSchemaIfNeeded();
         migrateArmyPowerSchemaIfNeeded();
+        migrateMapBuildingsSchemaIfNeeded();
     }
 
     private void migrateAllianceSchemaIfNeeded() {
@@ -93,6 +95,23 @@ public class GameDao {
                 WHERE unit_power = 0
                 """
         );
+    }
+
+    private void migrateMapBuildingsSchemaIfNeeded() {
+        jdbcTemplate.execute(
+                """
+                CREATE TABLE IF NOT EXISTS map_buildings (
+                    id BIGSERIAL PRIMARY KEY,
+                    owner_id BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    building_type TEXT NOT NULL,
+                    built_at BIGINT NOT NULL,
+                    UNIQUE(owner_id, x, y)
+                )
+                """
+        );
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_map_buildings_area ON map_buildings(x, y)");
     }
 
     public Optional<PlayerRecord> findPlayerByTelegramId(long telegramId) {
@@ -560,6 +579,40 @@ public class GameDao {
     public void saveCapital(long playerId, int x, int y) {
         setPlayerState(playerId, "CAPITAL_X", x);
         setPlayerState(playerId, "CAPITAL_Y", y);
+    }
+
+    public void saveMapBuilding(long ownerId, int x, int y, String type) {
+        long now = Instant.now().toEpochMilli();
+        jdbcTemplate.update(
+                """
+                INSERT INTO map_buildings(owner_id, x, y, building_type, built_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (owner_id, x, y)
+                DO UPDATE SET building_type = EXCLUDED.building_type, built_at = EXCLUDED.built_at
+                """,
+                ownerId, x, y, type, now
+        );
+    }
+
+    public List<MapBuilding> loadMapBuildingsInArea(int minX, int minY, int maxX, int maxY) {
+        return jdbcTemplate.query(
+                """
+                SELECT owner_id, x, y, building_type, built_at
+                FROM map_buildings
+                WHERE x BETWEEN ? AND ?
+                  AND y BETWEEN ? AND ?
+                ORDER BY built_at DESC
+                LIMIT 500
+                """,
+                (rs, rowNum) -> new MapBuilding(
+                        rs.getLong("owner_id"),
+                        rs.getInt("x"),
+                        rs.getInt("y"),
+                        rs.getString("building_type"),
+                        rs.getLong("built_at")
+                ),
+                minX, maxX, minY, maxY
+        );
     }
 
     public List<Point> loadAllCapitals() {
