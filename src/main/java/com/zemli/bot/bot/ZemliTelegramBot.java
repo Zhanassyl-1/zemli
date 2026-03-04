@@ -1,5 +1,7 @@
 package com.zemli.bot.bot;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zemli.bot.dao.GameDao;
 import com.zemli.bot.model.BattleRecord;
 import com.zemli.bot.model.BuildingState;
@@ -15,6 +17,7 @@ import com.zemli.bot.service.ImageService;
 import com.zemli.bot.service.MenuService;
 import com.zemli.bot.service.RegistrationService;
 import com.zemli.bot.service.Tactics;
+import com.zemli.bot.service.WorldMapService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.task.TaskExecutor;
@@ -25,8 +28,10 @@ import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.webapp.WebAppInfo;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -136,11 +141,14 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private final String configuredToken;
     private final String botUsername;
+    private final String webAppBaseUrl;
+    private final ObjectMapper objectMapper;
     private final RegistrationService registrationService;
     private final MenuService menuService;
     private final GameDao gameDao;
     private final GameCatalog catalog;
     private final ImageService imageService;
+    private final WorldMapService worldMapService;
     private final TaskExecutor taskExecutor;
     private final long groupChatId;
     private final Set<Long> adminUserIds;
@@ -158,11 +166,14 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     public ZemliTelegramBot(
             String botToken,
             String botUsername,
+            String webAppBaseUrl,
+            ObjectMapper objectMapper,
             RegistrationService registrationService,
             MenuService menuService,
             GameDao gameDao,
             GameCatalog catalog,
             ImageService imageService,
+            WorldMapService worldMapService,
             TaskExecutor taskExecutor,
             long groupChatId,
             String adminIdsRaw
@@ -170,11 +181,14 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         super(botToken);
         this.configuredToken = botToken;
         this.botUsername = botUsername;
+        this.webAppBaseUrl = webAppBaseUrl == null ? "" : webAppBaseUrl.trim();
+        this.objectMapper = objectMapper;
         this.registrationService = registrationService;
         this.menuService = menuService;
         this.gameDao = gameDao;
         this.catalog = catalog;
         this.imageService = imageService;
+        this.worldMapService = worldMapService;
         this.taskExecutor = taskExecutor;
         this.groupChatId = groupChatId;
         this.adminUserIds = parseAdminIds(adminIdsRaw);
@@ -305,11 +319,57 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 handleCallback(callback);
                 return;
             }
-            if (update.hasMessage() && update.getMessage().hasText()) {
-                handleMessage(update.getMessage());
+            if (update.hasMessage()) {
+                Message message = update.getMessage();
+                if (message.getWebAppData() != null) {
+                    handleWebAppData(message);
+                    return;
+                }
+                if (message.hasText()) {
+                    handleMessage(message);
+                }
             }
         } catch (Exception e) {
             log.error("Error processing update: {}", e.getMessage(), e);
+        }
+    }
+
+    private void handleWebAppData(Message message) {
+        long tgId = message.getFrom() == null ? 0L : message.getFrom().getId();
+        if (tgId == 0L) {
+            return;
+        }
+        Optional<PlayerRecord> playerOpt = registrationService.findRegistered(tgId);
+        if (playerOpt.isEmpty()) {
+            sendText(message.getChatId(), "Сначала зарегистрируйся через /start");
+            return;
+        }
+
+        try {
+            JsonNode node = objectMapper.readTree(message.getWebAppData().getData());
+            String action = node.path("action").asText("");
+            int x = node.path("x").asInt(0);
+            int y = node.path("y").asInt(0);
+            PlayerRecord player = playerOpt.get();
+
+            if ("build".equalsIgnoreCase(action)) {
+                gameDao.setPlayerState(player.id(), "LAST_WEB_BUILD_X", x);
+                gameDao.setPlayerState(player.id(), "LAST_WEB_BUILD_Y", y);
+                gameDao.setPlayerState(player.id(), "LAST_WEB_BUILD_AT", System.currentTimeMillis());
+                sendText(message.getChatId(), "🏗️ Команда строительства принята: (" + x + "," + y + ")");
+                return;
+            }
+            if ("move".equalsIgnoreCase(action) || "attack".equalsIgnoreCase(action)) {
+                gameDao.setPlayerState(player.id(), "LAST_WEB_MOVE_X", x);
+                gameDao.setPlayerState(player.id(), "LAST_WEB_MOVE_Y", y);
+                gameDao.setPlayerState(player.id(), "LAST_WEB_MOVE_AT", System.currentTimeMillis());
+                sendText(message.getChatId(), "⚔️ Команда передвижения принята: (" + x + "," + y + ")");
+                return;
+            }
+            sendText(message.getChatId(), "Получено действие Web App: " + action);
+        } catch (Exception e) {
+            log.warn("Failed to parse WebApp data: {}", e.getMessage());
+            sendText(message.getChatId(), "Не удалось обработать действие из карты");
         }
     }
 
@@ -506,7 +566,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 return;
             }
             if (registrationService.findRegistered(tgId).isPresent()) {
-                sendText(chatId, "С возвращением в Земли!", menuService.mainMenu());
+                sendMapButton(chatId);
             } else {
                 registrationService.begin(tgId);
                 sendText(chatId, "Как назовёшь свою деревню?");
@@ -514,7 +574,20 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
         if ("/help".equalsIgnoreCase(commandToken) && isPrivate) {
-            sendText(chatId, "📋 Помощь\n/start — 🚀 Начать игру\n/help — 📋 Помощь");
+            sendText(chatId, "📋 Помощь\n/start — 🚀 Начать игру\n/map — 🗺️ Карта вокруг столицы\n/legend — 📘 Легенда карты\n/help — 📋 Помощь");
+            return;
+        }
+        if ("/map".equalsIgnoreCase(commandToken) && isPrivate) {
+            Optional<PlayerRecord> p = registrationService.findRegistered(tgId);
+            if (p.isEmpty()) {
+                sendText(chatId, "Сначала зарегистрируйся через /start");
+                return;
+            }
+            sendMapButton(chatId);
+            return;
+        }
+        if ("/legend".equalsIgnoreCase(commandToken) && isPrivate) {
+            sendText(chatId, worldMapService.legend());
             return;
         }
         if ("/город".equalsIgnoreCase(commandToken) && isPrivate) {
@@ -1193,7 +1266,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
         if ("start:open".equals(data)) {
             if (registrationService.findRegistered(tgId).isPresent()) {
-                sendText(chatId, "С возвращением в Земли!", menuService.mainMenu());
+                sendMapButton(chatId);
             } else {
                 registrationService.begin(tgId);
                 sendText(chatId, "Как назовёшь свою деревню?");
@@ -1212,13 +1285,17 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             }
             Faction faction = Faction.valueOf(data.substring("faction:confirm:".length()));
             PlayerRecord player = registrationService.complete(tgId, faction);
+            GameDao.Point capital = worldMapService.ensureCapital(player.id(), faction);
             sendText(chatId,
                     "✅ Регистрация завершена!\n\n" +
                             "Деревня: " + player.villageName() + "\n" +
                             "Фракция: " + faction.getTitle() + "\n" +
+                            "Столица: (" + capital.x() + ", " + capital.y() + ")\n" +
                             "\n" +
-                            factionFinalMessage(faction),
+                            factionFinalMessage(faction) +
+                            "\n\nИспользуй /map чтобы увидеть карту.",
                     menuService.mainMenu());
+            sendMapButton(chatId);
             return;
         }
 
@@ -1229,12 +1306,18 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         }
         PlayerRecord player = playerOpt.get();
 
+        if ("MAP".equals(data)) {
+            sendMapButton(chatId);
+            return;
+        }
+
         if (data.startsWith("menu:")) {
             switch (data) {
                 case "menu:city" -> showCityCompact(chatId, player);
                 case "menu:build" -> showBuildTab(chatId, player, "new");
                 case "menu:army" -> showArmyMenu(chatId, player);
                 case "menu:mine" -> showMineMenu(chatId, player);
+                case "menu:map" -> sendMapButton(chatId);
                 case "menu:attack" -> showAttackTargets(chatId, player);
                 case "menu:trade" -> showTradeMenu(chatId, player);
                 case "menu:inventory" -> showInventory(chatId, player);
@@ -4226,6 +4309,29 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private InlineKeyboardButton btn(String text, String callbackData) {
         return InlineKeyboardButton.builder().text(text).callbackData(callbackData).build();
+    }
+
+    private void sendMapButton(Long chatId) {
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText("🗺️ **Карта мира**\n\nНажми кнопку ниже, чтобы открыть карту в Telegram:");
+        message.setParseMode("Markdown");
+
+        InlineKeyboardButton button = new InlineKeyboardButton();
+        button.setText("🗺️ ОТКРЫТЬ КАРТУ");
+        WebAppInfo webAppInfo = new WebAppInfo();
+        webAppInfo.setUrl("https://zemli.railway.app/map/index.html");
+        button.setWebApp(webAppInfo);
+
+        InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+        markup.setKeyboard(List.of(List.of(button)));
+        message.setReplyMarkup(markup);
+
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
     }
 
     private String costText(GameCatalog.Cost c) {

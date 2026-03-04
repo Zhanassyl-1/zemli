@@ -37,6 +37,8 @@ public class GameDao {
     public record PlayerBattleStats(int wins, int losses) {}
     public record TradeOffer(long id, long sellerId, String sellerVillage, String giveResource, int giveAmount, String wantResource, int wantAmount, long createdAt, long expiresAt, String status) {}
     public record Build(long playerId, String buildingType, int level) {}
+    public record Point(int x, int y) {}
+    public record CapitalPoint(long playerId, int x, int y) {}
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -544,6 +546,56 @@ public class GameDao {
                 playerId, stateKey
         );
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public Optional<Point> loadCapital(long playerId) {
+        Long x = getPlayerState(playerId, "CAPITAL_X");
+        Long y = getPlayerState(playerId, "CAPITAL_Y");
+        if (x == null || y == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new Point((int) x.longValue(), (int) y.longValue()));
+    }
+
+    public void saveCapital(long playerId, int x, int y) {
+        setPlayerState(playerId, "CAPITAL_X", x);
+        setPlayerState(playerId, "CAPITAL_Y", y);
+    }
+
+    public List<Point> loadAllCapitals() {
+        return jdbcTemplate.query(
+                """
+                SELECT player_id,
+                       MAX(CASE WHEN state_key = 'CAPITAL_X' THEN state_value END) AS capital_x,
+                       MAX(CASE WHEN state_key = 'CAPITAL_Y' THEN state_value END) AS capital_y
+                FROM player_state
+                WHERE state_key IN ('CAPITAL_X', 'CAPITAL_Y')
+                GROUP BY player_id
+                HAVING MAX(CASE WHEN state_key = 'CAPITAL_X' THEN state_value END) IS NOT NULL
+                   AND MAX(CASE WHEN state_key = 'CAPITAL_Y' THEN state_value END) IS NOT NULL
+                """,
+                (rs, rowNum) -> new Point(rs.getInt("capital_x"), rs.getInt("capital_y"))
+        );
+    }
+
+    public List<CapitalPoint> loadAllCapitalsWithOwners() {
+        return jdbcTemplate.query(
+                """
+                SELECT player_id,
+                       MAX(CASE WHEN state_key = 'CAPITAL_X' THEN state_value END) AS capital_x,
+                       MAX(CASE WHEN state_key = 'CAPITAL_Y' THEN state_value END) AS capital_y
+                FROM player_state
+                WHERE state_key IN ('CAPITAL_X', 'CAPITAL_Y')
+                GROUP BY player_id
+                HAVING MAX(CASE WHEN state_key = 'CAPITAL_X' THEN state_value END) IS NOT NULL
+                   AND MAX(CASE WHEN state_key = 'CAPITAL_Y' THEN state_value END) IS NOT NULL
+                """,
+                (rs, rowNum) -> new CapitalPoint(
+                        rs.getLong("player_id"),
+                        rs.getInt("capital_x"),
+                        rs.getInt("capital_y")
+                )
+        );
     }
 
     public int loadMorale(long playerId) {

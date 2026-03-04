@@ -1,11 +1,13 @@
 package com.zemli.bot.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zemli.bot.bot.ZemliTelegramBot;
 import com.zemli.bot.dao.GameDao;
 import com.zemli.bot.service.GameCatalog;
 import com.zemli.bot.service.ImageService;
 import com.zemli.bot.service.MenuService;
 import com.zemli.bot.service.RegistrationService;
+import com.zemli.bot.service.WorldMapService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +38,8 @@ public class TelegramBotConfig {
     private String botTokenTest;
     @Value("${BOT_USERNAME}")
     private String botUsername;
+    @Value("${WEB_APP_BASE_URL:}")
+    private String webAppBaseUrl;
     @Value("${GROUP_CHAT_ID:0}")
     private Long groupChatId;
     @Value("${ADMIN_IDS:}")
@@ -48,6 +52,8 @@ public class TelegramBotConfig {
             GameDao gameDao,
             GameCatalog gameCatalog,
             ImageService imageService,
+            WorldMapService worldMapService,
+            ObjectMapper objectMapper,
             TaskExecutor taskExecutor,
             Environment environment
     ) {
@@ -72,11 +78,14 @@ public class TelegramBotConfig {
         return new ZemliTelegramBot(
                 selectedToken,
                 botUsername,
+                webAppBaseUrl,
+                objectMapper,
                 registrationService,
                 menuService,
                 gameDao,
                 gameCatalog,
                 imageService,
+                worldMapService,
                 taskExecutor,
                 groupChatId == null ? 0L : groupChatId,
                 adminIds
@@ -135,6 +144,8 @@ public class TelegramBotConfig {
                         .scope(new BotCommandScopeAllPrivateChats())
                         .commands(List.of(
                                 new BotCommand("/start", "🚀 Начать игру"),
+                                new BotCommand("/map", "🗺️ Показать карту"),
+                                new BotCommand("/legend", "📘 Легенда карты"),
                                 new BotCommand("/help", "📋 Помощь"),
                                 new BotCommand("/getid", "🆔 Показать ID"),
                                 new BotCommand("/testimage", "🖼️ Тест картинки")

@@ -11,10 +11,9 @@ public class MenuService {
 
     public InlineKeyboardMarkup mainMenu() {
         return InlineKeyboardMarkup.builder()
-                .keyboardRow(List.of(button("⚔️ ВОЙНА", "menu:attack"), button("🏰 ГОРОД", "menu:city")))
-                .keyboardRow(List.of(button("🛡️ АРМИЯ", "menu:army"), button("👑 ГЕРОИ", "menu:heroes")))
-                .keyboardRow(List.of(button("📊 ПРОФИЛЬ", "menu:profile"), button("🏗️ СТРОЙКА", "menu:build")))
-                .keyboardRow(List.of(button("⛏️ ДОБЫЧА", "menu:mine"), button("🏦 ТОРГОВЛЯ", "menu:trade")))
+                .keyboardRow(List.of(button("⚔️ ВОЙНА", "menu:attack"), button("🛡️ АРМИЯ", "menu:army")))
+                .keyboardRow(List.of(button("👤 ПРОФИЛЬ", "menu:profile"), button("🗺️ КАРТА", "MAP")))
+                .keyboardRow(List.of(button("💰 ТОРГОВЛЯ", "menu:trade")))
                 .build();
     }
 
