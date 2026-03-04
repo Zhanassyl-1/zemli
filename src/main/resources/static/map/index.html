@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zemli - Карта мира</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="style.css">
     <style>
         * {
             margin: 0;
@@ -24,102 +23,131 @@
             display: block;
             width: 100vw;
             height: 100vh;
-            background: #000;
-            cursor: grab;
+            background: #0a2f6a;
+            cursor: crosshair;
         }
 
-        #gameCanvas:active {
-            cursor: grabbing;
-        }
-
-        .controls {
+        /* Панель построек */
+        .build-panel {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
-            display: flex;
-            gap: 10px;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(20, 20, 20, 0.95);
+            border: 2px solid #444;
+            border-radius: 15px;
+            padding: 15px;
+            color: white;
             z-index: 1000;
+            backdrop-filter: blur(10px);
+            min-width: 200px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
 
-        .controls button {
-            width: 50px;
-            height: 50px;
-            border-radius: 25px;
-            background: rgba(30, 30, 30, 0.9);
-            color: white;
-            border: 2px solid #444;
-            font-size: 24px;
+        .build-title {
+            font-size: 18px;
             font-weight: bold;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #ffd700;
+            border-bottom: 1px solid #444;
+            padding-bottom: 8px;
+        }
+
+        .build-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .build-btn {
+            background: #2a2a2a;
+            border: 1px solid #555;
+            color: white;
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-size: 16px;
             cursor: pointer;
             transition: all 0.2s;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            text-align: left;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        .controls button:hover {
-            background: #444;
-            border-color: #666;
-            transform: scale(1.1);
+        .build-btn:hover {
+            background: #3a3a3a;
+            border-color: #888;
         }
 
-        .coordinates {
+        .build-btn.selected {
+            background: #2a4a6a;
+            border-color: #6aaaff;
+            box-shadow: 0 0 10px #2a4a6a;
+        }
+
+        .selected-info {
+            margin-top: 15px;
+            padding: 10px;
+            background: #1a1a1a;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #aaddff;
+            text-align: center;
+            border: 1px solid #333;
+        }
+
+        .coordinates, .biome-info, .title {
             position: fixed;
-            bottom: 20px;
-            left: 20px;
-            color: #fff;
+            color: white;
             background: rgba(0, 0, 0, 0.7);
             padding: 8px 16px;
             border-radius: 20px;
             font-size: 14px;
-            font-family: monospace;
             border: 1px solid #444;
-            z-index: 1000;
             backdrop-filter: blur(5px);
+            z-index: 1000;
         }
 
         .biome-info {
-            position: fixed;
             top: 20px;
             left: 20px;
-            color: #fff;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            border: 1px solid #444;
-            z-index: 1000;
-            backdrop-filter: blur(5px);
         }
 
         .title {
-            position: fixed;
             top: 20px;
             right: 20px;
-            color: #fff;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 16px;
             font-weight: bold;
-            border: 1px solid #444;
-            z-index: 1000;
-            backdrop-filter: blur(5px);
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .coordinates {
+            bottom: 20px;
+            left: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .build-panel {
+                left: 10px;
+                padding: 10px;
+                min-width: 150px;
+            }
+            .build-btn {
+                padding: 8px 12px;
+                font-size: 14px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="title">🗺️ ZEMLI</div>
-    <div class="biome-info" id="biomeInfo">Равнина</div>
+    <div class="biome-info" id="biomeInfo">🌊 Океан</div>
     <div class="coordinates" id="coords">X: 0, Y: 0</div>
 
-    <div class="controls">
-        <button id="zoomIn">+</button>
-        <button id="zoomOut">-</button>
-        <button id="center">🏠</button>
-    </div>
-
-    <canvas id="gameCanvas"></canvas>
+    <!-- Панель построек -->
     <div class="build-panel">
-        <div class="build-title">🏗️ Постройки</div>
+        <div class="build-title">🏗️ Строительство</div>
         <div class="build-buttons">
             <button class="build-btn" data-type="capitol">🏰 Ратуша</button>
             <button class="build-btn" data-type="lumber">🪓 Лесопилка</button>
@@ -130,8 +158,10 @@
             <button class="build-btn" data-type="tower">🗼 Вышка</button>
             <button class="build-btn" data-type="gold">💰 Золотая шахта</button>
         </div>
-        <div class="selected-info" id="selectedBuilding">Выбрано: —</div>
+        <div class="selected-info" id="selectedBuilding">👆 Выберите здание</div>
     </div>
+
+    <canvas id="gameCanvas"></canvas>
 
     <script src="script.js"></script>
 </body>
