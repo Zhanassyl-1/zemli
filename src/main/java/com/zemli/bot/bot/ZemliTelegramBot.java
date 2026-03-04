@@ -4314,7 +4314,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         InlineKeyboardButton button = new InlineKeyboardButton();
         button.setText("🗺️ ОТКРЫТЬ КАРТУ");
         WebAppInfo webAppInfo = new WebAppInfo();
-        webAppInfo.setUrl("https://zhanassyl-1.github.io/zemli-map/index.html");
+        webAppInfo.setUrl("https://zhanassyl-1.github.io/zemli-map/");
         button.setWebApp(webAppInfo);
 
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
