@@ -8,6 +8,8 @@ import com.zemli.bot.model.MarketListing;
 import com.zemli.bot.model.PlayerRecord;
 import com.zemli.bot.model.ResourcesRecord;
 import com.zemli.bot.service.GameCatalog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -25,6 +27,8 @@ import java.util.stream.Collectors;
 
 @Repository
 public class GameDao {
+    private static final Logger log = LoggerFactory.getLogger(GameDao.class);
+
     public record WinnerStat(long winnerId, int wins) {}
     public record ArmyLoss(String unitType, int lost) {}
     public record EpicBattle(long attackerId, long defenderId, long winnerId, int attackerPower, int defenderPower) {}
@@ -45,9 +49,14 @@ public class GameDao {
 
     public GameDao(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        migrateAllianceSchemaIfNeeded();
-        migrateArmyPowerSchemaIfNeeded();
-        migrateMapBuildingsSchemaIfNeeded();
+        try {
+            migrateAllianceSchemaIfNeeded();
+            migrateArmyPowerSchemaIfNeeded();
+            migrateMapBuildingsSchemaIfNeeded();
+        } catch (Exception e) {
+            log.error("Ошибка в GameDao при инициализации: {}", e.getMessage(), e);
+            throw new IllegalStateException("GameDao initialization failed", e);
+        }
     }
 
     private void migrateAllianceSchemaIfNeeded() {
