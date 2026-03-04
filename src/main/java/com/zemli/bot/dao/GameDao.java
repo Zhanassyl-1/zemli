@@ -15,6 +15,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.sql.DataSource;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -47,8 +48,8 @@ public class GameDao {
 
     private final JdbcTemplate jdbcTemplate;
 
-    public GameDao(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public GameDao(DataSource dataSource) {
+        this.jdbcTemplate = new JdbcTemplate(dataSource);
         try {
             migrateAllianceSchemaIfNeeded();
             migrateArmyPowerSchemaIfNeeded();
