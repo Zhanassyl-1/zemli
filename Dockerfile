@@ -15,6 +15,8 @@ WORKDIR /app
 
 # Копируем собранный jar из первого этапа
 COPY --from=build /app/target/zemli-bot-1.0.0.jar app.jar
+# Копируем статику в runtime для spring.web.resources.static-locations=file:/app/static/
+COPY --from=build /app/static /app/static
 
 # Запускаем приложение
 ENTRYPOINT ["java", "-jar", "app.jar"]
