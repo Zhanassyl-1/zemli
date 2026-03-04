@@ -12,16 +12,6 @@ import org.springframework.web.bind.annotation.ResponseBody;
 @Controller
 public class MapPageController {
 
-    @GetMapping("/map")
-    public String mapRedirect() {
-        return "forward:/map/index.html";
-    }
-
-    @GetMapping("/map/")
-    public String mapSlash() {
-        return "forward:/map/index.html";
-    }
-
     @GetMapping("/map/{fileName:.+}")
     @ResponseBody
     public ResponseEntity<Resource> serveFile(@PathVariable String fileName) {

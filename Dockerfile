@@ -4,7 +4,7 @@ WORKDIR /app
 # Копируем файлы для сборки
 COPY pom.xml .
 COPY src ./src
-COPY src/main/resources /app/src/main/resources
+COPY src/main/resources/static /app/static
 
 # Собираем jar-файл (без тестов)
 RUN mvn -DskipTests clean package
