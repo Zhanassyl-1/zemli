@@ -65,13 +65,50 @@ h1 { position: absolute; top: 10px; left: 10px; z-index: 100; color: white; }
     color: #aaddff;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 768px) {
     .build-panel {
         left: 10px;
         top: auto;
-        bottom: 90px;
+        bottom: 20px;
         transform: none;
-        max-height: 45vh;
-        width: min(280px, calc(100vw - 20px));
+        max-width: calc(100vw - 20px);
+        max-height: 40vh;
+        overflow-y: auto;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .build-buttons {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .build-btn {
+        flex: 1 1 auto;
+        min-width: 70px;
+        padding: 8px 5px;
+        font-size: 14px;
+        justify-content: center;
+    }
+
+    .title {
+        font-size: 14px;
+        top: 10px;
+        right: 10px;
+        padding: 5px 10px;
+    }
+
+    .biome-info {
+        top: 10px;
+        left: 10px;
+        font-size: 12px;
+        padding: 5px 10px;
+    }
+
+    .coordinates {
+        bottom: 80px;
+        left: 10px;
+        font-size: 12px;
     }
 }

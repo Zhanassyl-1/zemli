@@ -243,6 +243,14 @@ function biomeName(code) {
   }
 }
 
+function getBiome(tileX, tileY) {
+  const wx = tileX + CENTER_X;
+  const wy = tileY + CENTER_Y;
+  const inside = wx >= 0 && wy >= 0 && wx < MAP_WIDTH && wy < MAP_HEIGHT;
+  const b = inside ? biomeMap[idx(wx, wy)] : BIOME.OCEAN;
+  return biomeName(b);
+}
+
 function drawMap(ctx, canvas) {
   const tile = TILE_SIZE * scale;
   if (tile <= 0.01) return;
@@ -352,27 +360,63 @@ window.onload = function () {
   resizeCanvas();
 
   let isDragging = false;
-  let lastX = 0;
-  let lastY = 0;
+  let lastX;
+  let lastY;
 
-  canvas.addEventListener('mousedown', (e) => {
+  function handleStart(e) {
+    e.preventDefault();
     isDragging = true;
-    lastX = e.clientX;
-    lastY = e.clientY;
-  });
+    const clientX = e.clientX ?? e.touches[0].clientX;
+    const clientY = e.clientY ?? e.touches[0].clientY;
+    lastX = clientX;
+    lastY = clientY;
+  }
 
-  window.addEventListener('mousemove', (e) => {
+  function handleMove(e) {
     if (!isDragging) return;
-    const dx = e.clientX - lastX;
-    const dy = e.clientY - lastY;
+    e.preventDefault();
+    const clientX = e.clientX ?? e.touches[0].clientX;
+    const clientY = e.clientY ?? e.touches[0].clientY;
+
+    const dx = clientX - lastX;
+    const dy = clientY - lastY;
+
     cameraX -= dx;
     cameraY -= dy;
-    lastX = e.clientX;
-    lastY = e.clientY;
-  });
 
-  window.addEventListener('mouseup', () => {
+    lastX = clientX;
+    lastY = clientY;
+  }
+
+  function handleEnd(e) {
+    e.preventDefault();
     isDragging = false;
+  }
+
+  canvas.addEventListener('mousedown', handleStart);
+  canvas.addEventListener('mousemove', handleMove);
+  canvas.addEventListener('mouseup', handleEnd);
+  canvas.addEventListener('mouseleave', handleEnd);
+  canvas.addEventListener('touchstart', handleStart, { passive: false });
+  canvas.addEventListener('touchmove', handleMove, { passive: false });
+  canvas.addEventListener('touchend', handleEnd);
+  canvas.addEventListener('touchcancel', handleEnd);
+
+  canvas.addEventListener('touchstart', (e) => {
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const touchX = touch.clientX - rect.left;
+    const touchY = touch.clientY - rect.top;
+
+    const worldX = (touchX + cameraX) / (TILE_SIZE * scale);
+    const worldY = (touchY + cameraY) / (TILE_SIZE * scale);
+
+    const tileX = Math.floor(worldX) - CENTER_X;
+    const tileY = Math.floor(worldY) - CENTER_Y;
+
+    const biome = getBiome(tileX, tileY);
+    document.getElementById('coords').textContent = `X: ${tileX}, Y: ${tileY}`;
+    document.getElementById('biomeInfo').textContent = biome;
   });
 
   canvas.addEventListener('mousemove', (e) => {
