@@ -1,7 +1,6 @@
 # Stage 1: сборка приложения
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
-
 # Копируем файлы для сборки
 COPY pom.xml .
 COPY src ./src
