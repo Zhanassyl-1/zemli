@@ -17,7 +17,6 @@ import com.zemli.bot.service.ImageService;
 import com.zemli.bot.service.MenuService;
 import com.zemli.bot.service.RegistrationService;
 import com.zemli.bot.service.Tactics;
-import com.zemli.bot.service.WorldMapService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.task.TaskExecutor;
@@ -148,7 +147,6 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private final GameDao gameDao;
     private final GameCatalog catalog;
     private final ImageService imageService;
-    private final WorldMapService worldMapService;
     private final TaskExecutor taskExecutor;
     private final long groupChatId;
     private final Set<Long> adminUserIds;
@@ -173,7 +171,6 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             GameDao gameDao,
             GameCatalog catalog,
             ImageService imageService,
-            WorldMapService worldMapService,
             TaskExecutor taskExecutor,
             long groupChatId,
             String adminIdsRaw
@@ -188,7 +185,6 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         this.gameDao = gameDao;
         this.catalog = catalog;
         this.imageService = imageService;
-        this.worldMapService = worldMapService;
         this.taskExecutor = taskExecutor;
         this.groupChatId = groupChatId;
         this.adminUserIds = parseAdminIds(adminIdsRaw);
@@ -587,7 +583,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
         if ("/legend".equalsIgnoreCase(commandToken) && isPrivate) {
-            sendText(chatId, worldMapService.legend());
+            sendText(chatId, "📘 Легенда карты доступна в WebApp: открой /map");
             return;
         }
         if ("/город".equalsIgnoreCase(commandToken) && isPrivate) {
@@ -1285,12 +1281,10 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             }
             Faction faction = Faction.valueOf(data.substring("faction:confirm:".length()));
             PlayerRecord player = registrationService.complete(tgId, faction);
-            GameDao.Point capital = worldMapService.ensureCapital(player.id(), faction);
             sendText(chatId,
                     "✅ Регистрация завершена!\n\n" +
                             "Деревня: " + player.villageName() + "\n" +
                             "Фракция: " + faction.getTitle() + "\n" +
-                            "Столица: (" + capital.x() + ", " + capital.y() + ")\n" +
                             "\n" +
                             factionFinalMessage(faction) +
                             "\n\nИспользуй /map чтобы увидеть карту.",

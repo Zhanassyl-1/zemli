@@ -7,7 +7,6 @@ import com.zemli.bot.service.GameCatalog;
 import com.zemli.bot.service.ImageService;
 import com.zemli.bot.service.MenuService;
 import com.zemli.bot.service.RegistrationService;
-import com.zemli.bot.service.WorldMapService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -52,7 +51,6 @@ public class TelegramBotConfig {
             GameDao gameDao,
             GameCatalog gameCatalog,
             ImageService imageService,
-            WorldMapService worldMapService,
             ObjectMapper objectMapper,
             TaskExecutor taskExecutor,
             Environment environment
@@ -85,7 +83,6 @@ public class TelegramBotConfig {
                 gameDao,
                 gameCatalog,
                 imageService,
-                worldMapService,
                 taskExecutor,
                 groupChatId == null ? 0L : groupChatId,
                 adminIds
