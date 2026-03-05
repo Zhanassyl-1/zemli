@@ -85,10 +85,17 @@ let loadedUnits = [];
 let enemyMarkers = [];
 let resourceNodes = [];
 let dirty = true;
+let lastCameraX = cameraX;
+let lastCameraY = cameraY;
+let lastScale = scale;
+let needsRedraw = true;
+let hoverX = null;
+let hoverY = null;
 
 const VIEW_RADIUS = 15;
 const FOG_COLOR = "#0f1720";
 const playerHome = { x: 0, y: 0 };
+let viewCircles = [{ x: 0, y: 0, radius: VIEW_RADIUS }];
 
 const buildingEmojiMap = {
   capitol: "🏰",
@@ -285,8 +292,8 @@ function assignBiomes(landThreshold) {
 
 function generateBiomeMap() {
   console.log("🗺️ Генерация биомов...");
-  generateBiomeMap();
-  generateResourceNodes();
+  const threshold = generateElevationAndThreshold();
+  assignBiomes(threshold);
   console.log("✅ Биомы сгенерированы");
 }
 
@@ -312,12 +319,25 @@ function generateResourceNodes() {
 
 function requestRender() {
   dirty = true;
+  needsRedraw = true;
 }
 
-function isWithinViewRadius(relX, relY) {
-  const dx = relX - playerHome.x;
-  const dy = relY - playerHome.y;
-  return (dx * dx + dy * dy) <= (VIEW_RADIUS * VIEW_RADIUS);
+function rebuildViewCircles() {
+  viewCircles = [{ x: playerHome.x, y: playerHome.y, radius: VIEW_RADIUS }];
+  const towers = (window.buildings || loadedBuildings || []).filter((b) => normalizeType(b.type) === "tower");
+  for (const t of towers) {
+    viewCircles.push({ x: Number(t.x || 0), y: Number(t.y || 0), radius: 8 });
+  }
+  console.log("👁️ Круги обзора:", viewCircles.length);
+}
+
+function isVisible(relX, relY) {
+  for (const c of viewCircles) {
+    const dx = relX - c.x;
+    const dy = relY - c.y;
+    if (Math.sqrt(dx * dx + dy * dy) <= c.radius) return true;
+  }
+  return false;
 }
 
 function biomeName(code) {
@@ -383,6 +403,7 @@ function ensureStartingHome() {
     playerHome.x = Number(home.x || 0);
     playerHome.y = Number(home.y || 0);
     console.log("🏠 Дом загружен:", playerHome);
+    rebuildViewCircles();
     return;
   }
 
@@ -391,6 +412,7 @@ function ensureStartingHome() {
   playerHome.x = 0;
   playerHome.y = 0;
   console.log("🏠 Добавлен стартовый дом: (0,0)");
+  rebuildViewCircles();
 }
 
 async function placeBuilding(x, y, type) {
@@ -672,7 +694,52 @@ function pickNearestUnit(x, y) {
   return best;
 }
 
+const buildingPriceMap = {
+  lumber: "100🪵",
+  mine: "150🪨",
+  iron_mine: "200⚔️+100🪨",
+  farm: "50🌾+50🪵",
+  tower: "200🪵+150🪨",
+  warehouse: "300🪵+200🪨",
+  house: "100🪵+50🪨",
+  barracks: "400🪵+300⚔️"
+};
+
+function getPrice(type) {
+  return buildingPriceMap[normalizeType(type)] || "—";
+}
+
+function checkCanPlace(relX, relY, type) {
+  if (!isVisible(relX, relY)) return false;
+  const occupied = (window.buildings || loadedBuildings || []).some((b) => Number(b.x) === relX && Number(b.y) === relY);
+  if (occupied) return false;
+  const wx = relX + CENTER_X;
+  const wy = relY + CENTER_Y;
+  if (wx < 0 || wy < 0 || wx >= MAP_WIDTH || wy >= MAP_HEIGHT) return false;
+  const biome = biomeMap[idx(wx, wy)];
+  if (biome === BIOME.OCEAN || biome === BIOME.SHALLOW) return false;
+  return !!type;
+}
+
+function drawHover(ctx) {
+  if (!selectedBuilding || hoverX === null || hoverY === null) return;
+  const x = ((hoverX + CENTER_X) * TILE_SIZE * scale) - cameraX;
+  const y = ((hoverY + CENTER_Y) * TILE_SIZE * scale) - cameraY;
+  const tile = TILE_SIZE * scale;
+  const canPlace = checkCanPlace(hoverX, hoverY, selectedBuilding);
+  ctx.strokeStyle = canPlace ? "#00ff00" : "#ff0000";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x, y, tile, tile);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = '12px "Courier New"';
+  ctx.fillText(getPrice(selectedBuilding), x, y - 6);
+}
+
 async function onMapClick(relX, relY) {
+  if (!isVisible(relX, relY)) {
+    console.log("🚫 Клетка вне обзора:", relX, relY);
+    return;
+  }
   if (actionMode === "build" || selectedBuilding) {
     if (!selectedBuilding) {
       const types = inventoryTypes();
@@ -685,6 +752,12 @@ async function onMapClick(relX, relY) {
     if (!inventory[selectedBuilding] || inventory[selectedBuilding] <= 0) {
       alert("Этой постройки нет в инвентаре");
       renderInventoryPanel();
+      return;
+    }
+
+    const canPlace = checkCanPlace(relX, relY, selectedBuilding);
+    if (!canPlace) {
+      console.log("🚫 Нельзя поставить", selectedBuilding, "в", relX, relY);
       return;
     }
 
@@ -744,6 +817,9 @@ function handleMouseMove(e) {
 
   document.getElementById("coords").textContent = `X: ${rel.x}, Y: ${rel.y}`;
   document.getElementById("biomeInfo").textContent = biomeName(b);
+  hoverX = rel.x;
+  hoverY = rel.y;
+  if (selectedBuilding) requestRender();
 
   if (!isDragging) return;
   const dx = e.clientX - lastPointerX;
@@ -840,7 +916,7 @@ function drawMap(ctx, canvas) {
       const x = (col * tile) - cameraX;
       const relX = col - CENTER_X;
       const relY = row - CENTER_Y;
-      if (!isWithinViewRadius(relX, relY)) {
+      if (!isVisible(relX, relY)) {
         ctx.fillStyle = FOG_COLOR;
         ctx.fillRect(x, y, tile + 1, tile + 1);
         continue;
@@ -861,7 +937,7 @@ function drawResourceMarkers(ctx, view) {
   ctx.font = `${Math.max(11, tile * 0.45)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
 
   for (const node of resourceNodes) {
-    if (!isWithinViewRadius(node.x, node.y)) continue;
+    if (!isVisible(node.x, node.y)) continue;
     const pos = worldToScreen(node.x, node.y);
     if (pos.x + tile < -40 || pos.y + tile < -40 || pos.x > mapCanvas.width + 40 || pos.y > mapCanvas.height + 40) continue;
     ctx.fillText(node.icon, pos.x + tile / 2, pos.y + tile / 2);
@@ -872,6 +948,9 @@ function drawBuildings(ctx, view) {
   if (Array.isArray(ctx)) {
     loadedBuildings = ctx;
     window.buildings = loadedBuildings;
+    ensureStartingHome();
+    rebuildViewCircles();
+    requestRender();
     return;
   }
   const { tile } = view;
@@ -929,7 +1008,15 @@ function drawEnemies(ctx, view) {
 }
 
 function render() {
-  if (!dirty) {
+  if (cameraX !== lastCameraX || cameraY !== lastCameraY || scale !== lastScale) {
+    needsRedraw = true;
+    dirty = true;
+    lastCameraX = cameraX;
+    lastCameraY = cameraY;
+    lastScale = scale;
+  }
+
+  if (!dirty && !needsRedraw) {
     requestAnimationFrame(render);
     return;
   }
@@ -943,7 +1030,9 @@ function render() {
   drawBuildings(mapCtx, view);
   drawUnits(mapCtx, view);
   drawEnemies(mapCtx, view);
+  drawHover(mapCtx);
   dirty = false;
+  needsRedraw = false;
   requestAnimationFrame(render);
 }
 
@@ -951,8 +1040,8 @@ async function bootstrap() {
   mapCanvas = document.getElementById("gameCanvas");
   mapCtx = mapCanvas.getContext("2d");
 
-  const threshold = generateElevationAndThreshold();
-  assignBiomes(threshold);
+  generateBiomeMap();
+  generateResourceNodes();
 
   enemyMarkers = generateEnemyMarkers();
   loadUnits();
@@ -984,8 +1073,14 @@ async function bootstrap() {
   mapCanvas.addEventListener("click", async (e) => {
     if (isDragging) return;
     const rect = mapCanvas.getBoundingClientRect();
-    const rel = getRelativeTileFromScreen(e.clientX - rect.left, e.clientY - rect.top);
-    await onMapClick(rel.x, rel.y);
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const worldX = Math.round((mouseX + cameraX) / (TILE_SIZE * scale));
+    const worldY = Math.round((mouseY + cameraY) / (TILE_SIZE * scale));
+    const tileX = worldX - CENTER_X;
+    const tileY = worldY - CENTER_Y;
+    console.log(`Клик по клетке (${tileX}, ${tileY})`);
+    await onMapClick(tileX, tileY);
   });
 
   await loadGameState();
