@@ -7,9 +7,12 @@ const CENTER_Y = Math.floor(MAP_HEIGHT / 2);
 
 const API_BASE = "";
 const tg = window.Telegram?.WebApp;
-const playerId = Number(tg?.initDataUnsafe?.user?.id || 0);
-console.log("Player ID:", playerId);
-const TELEGRAM_USER_ID = playerId;
+const playerId = tg?.initDataUnsafe?.user?.id || 0;
+console.log("🎮 Player ID:", playerId);
+if (!playerId) {
+  alert("Ошибка: не удалось получить ID пользователя");
+}
+const TELEGRAM_USER_ID = Number(playerId || 0);
 const URL_PLAYER_ID = Number(new URLSearchParams(window.location.search).get("playerId") || 0);
 const ACTIVE_PLAYER_ID = URL_PLAYER_ID || TELEGRAM_USER_ID;
 const USER_KEY = TELEGRAM_USER_ID > 0 ? String(TELEGRAM_USER_ID) : "guest";
@@ -93,6 +96,7 @@ if (tg) {
   tg.setHeaderColor("#1a1a1a");
   tg.setBackgroundColor("#1a1a1a");
   tg.ready();
+  loadGame();
 }
 
 function idx(x, y) {
@@ -321,16 +325,17 @@ function normalizeInventoryPayload(rawInventory) {
   return result;
 }
 
-async function loadGameState() {
-  if (!ACTIVE_PLAYER_ID) return;
+async function loadGame() {
+  if (!playerId) return;
 
   try {
-    const res = await fetch(`${API_BASE}/api/game/state?playerId=${ACTIVE_PLAYER_ID}`);
+    const res = await fetch(`${API_BASE}/api/game/state?playerId=${playerId}`);
     if (!res.ok) {
       console.warn("State load failed", res.status);
       return;
     }
     const data = await res.json();
+    console.log("📦 Загружено:", data);
     loadedBuildings = Array.isArray(data.buildings) ? data.buildings : [];
     inventory = normalizeInventoryPayload(data.inventory || {});
     gameResources = data.resources || null;
@@ -342,8 +347,12 @@ async function loadGameState() {
       drawMap(mapCtx, mapCanvas);
     }
   } catch (e) {
-    console.warn("State load failed", e);
+    console.error("❌ Ошибка загрузки:", e);
   }
+}
+
+async function loadGameState() {
+  await loadGame();
 }
 
 function unitsStorageKey() {
