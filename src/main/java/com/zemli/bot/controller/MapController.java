@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @CrossOrigin(origins = "*")
@@ -54,12 +55,28 @@ public class MapController {
         if (buildingType == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "building/type is required");
         }
+        String inventoryItemType = "MAP_BUILD_" + buildingType.toUpperCase();
+        if (!gameDao.removeInventoryItem(player.id(), inventoryItemType, 1)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No building in inventory: " + buildingType);
+        }
         gameDao.setPlayerState(player.id(), "LAST_WEB_BUILD_X", request.x());
         gameDao.setPlayerState(player.id(), "LAST_WEB_BUILD_Y", request.y());
         gameDao.setPlayerState(player.id(), "LAST_WEB_BUILD_AT", System.currentTimeMillis());
         gameDao.setPlayerState(player.id(), "LAST_WEB_BUILD_TYPE_HASH", buildingType.hashCode());
         gameDao.saveMapBuilding(player.id(), request.x(), request.y(), buildingType);
         return new ActionResult(true, "Команда на строительство отправлена");
+    }
+
+    @GetMapping("/build-inventory")
+    public Map<String, Integer> buildInventory(@RequestParam long userId) {
+        PlayerRecord player = registrationService.findRegistered(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found for userId=" + userId));
+        return gameDao.loadInventory(player.id()).stream()
+                .filter(item -> item.type().startsWith("MAP_BUILD_") && item.quantity() > 0)
+                .collect(java.util.stream.Collectors.toMap(
+                        item -> item.type().substring("MAP_BUILD_".length()).toLowerCase(),
+                        item -> item.quantity()
+                ));
     }
 
     @GetMapping("/state")
@@ -77,6 +94,12 @@ public class MapController {
         List<MapBuildingDto> buildings = gameDao.loadMapBuildingsByOwner(player.id()).stream()
                 .map(row -> new MapBuildingDto(row.x(), row.y(), row.type(), row.ownerId(), row.builtAt()))
                 .toList();
+        Map<String, Integer> buildInventory = gameDao.loadInventory(player.id()).stream()
+                .filter(item -> item.type().startsWith("MAP_BUILD_") && item.quantity() > 0)
+                .collect(java.util.stream.Collectors.toMap(
+                        item -> item.type().substring("MAP_BUILD_".length()).toLowerCase(),
+                        item -> item.quantity()
+                ));
 
         return new MapStateResponse(
                 new KingdomDto(kingdom.race(), kingdom.homeX(), kingdom.homeY(), kingdom.level(), kingdom.createdAt().toEpochMilli()),
@@ -90,7 +113,8 @@ public class MapController {
                         resources.maxPopulation(),
                         resources.storageLimit()
                 ),
-                buildings
+                buildings,
+                buildInventory
         );
     }
 
@@ -175,6 +199,11 @@ public class MapController {
     ) {
     }
 
-    public record MapStateResponse(KingdomDto kingdom, ResourcesDto resources, List<MapBuildingDto> buildings) {
+    public record MapStateResponse(
+            KingdomDto kingdom,
+            ResourcesDto resources,
+            List<MapBuildingDto> buildings,
+            Map<String, Integer> buildInventory
+    ) {
     }
 }

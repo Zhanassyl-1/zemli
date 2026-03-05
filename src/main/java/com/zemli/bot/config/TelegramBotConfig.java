@@ -144,6 +144,7 @@ public class TelegramBotConfig {
                                 new BotCommand("/map", "🗺️ Показать карту"),
                                 new BotCommand("/shop", "🛒 Магазин ресурсов"),
                                 new BotCommand("/sell", "💱 Продажа ресурсов"),
+                                new BotCommand("/build", "🏗️ Купить постройки"),
                                 new BotCommand("/stats", "📊 Статистика королевства"),
                                 new BotCommand("/legend", "📘 Легенда карты"),
                                 new BotCommand("/help", "📋 Помощь"),

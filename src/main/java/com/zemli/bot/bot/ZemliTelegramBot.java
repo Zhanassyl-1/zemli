@@ -72,18 +72,15 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             "NETHERITE_ARMOR", 0.50
     );
     private static final List<String> RESOURCES = List.of("WOOD", "STONE", "FOOD", "IRON", "GOLD", "MANA", "ALCOHOL");
-    private static final List<ShopOffer> SHOP_BUY_OFFERS = List.of(
-            new ShopOffer("wood", "🪵 Дерево", "WOOD", 100, 10),
-            new ShopOffer("stone", "🪨 Камень", "STONE", 100, 15),
-            new ShopOffer("iron", "⚔️ Железо", "IRON", 50, 30),
-            new ShopOffer("food", "🌾 Еда", "FOOD", 200, 5)
+    private static final List<ShopOffer> SHOP_OFFERS = List.of(
+            new ShopOffer("wood", "🪵 Дерево", "WOOD", 10.0 / 100.0, 5.0 / 100.0),
+            new ShopOffer("stone", "🪨 Камень", "STONE", 15.0 / 100.0, 8.0 / 100.0),
+            new ShopOffer("iron", "⚔️ Железо", "IRON", 30.0 / 50.0, 20.0 / 50.0),
+            new ShopOffer("food", "🌾 Еда", "FOOD", 5.0 / 200.0, 2.0 / 200.0)
     );
-    private static final List<ShopOffer> SHOP_SELL_OFFERS = List.of(
-            new ShopOffer("wood", "🪵 Дерево", "WOOD", 100, 5),
-            new ShopOffer("stone", "🪨 Камень", "STONE", 100, 8),
-            new ShopOffer("iron", "⚔️ Железо", "IRON", 50, 20),
-            new ShopOffer("food", "🌾 Еда", "FOOD", 200, 2)
-    );
+    private static final String STATE_SHOP_MODE = "SHOP_MODE";
+    private static final String STATE_SHOP_RESOURCE = "SHOP_RESOURCE";
+    private static final String STATE_SHOP_AWAIT_CUSTOM = "SHOP_AWAIT_CUSTOM";
     // ВОТ СЮДА ВСТАВЬ СВОЙ ЮЗЕРНЕЙМ:
     public static final List<String> ADMIN_USERNAMES = new ArrayList<>(Arrays.asList(
             "твой_юзернейм",
@@ -107,6 +104,16 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     private static final long UNIQUE_TACTIC_COOLDOWN_MS = 30 * 60_000L;
     private static final String STATE_ATTACK_CD_UNTIL = "ATTACK_CD_UNTIL";
     private static final String STATE_HERO_CD_UNTIL = "HERO_CD_UNTIL";
+    private static final List<BuildingShopItem> BUILDING_SHOP_ITEMS = List.of(
+            new BuildingShopItem("lumber", "🪓 Лесопилка", 100, 0, 0, 0),
+            new BuildingShopItem("mine", "⛏️ Шахта", 0, 150, 0, 0),
+            new BuildingShopItem("iron_mine", "⚔️ Железная шахта", 0, 100, 200, 0),
+            new BuildingShopItem("farm", "🌾 Ферма", 50, 0, 0, 50),
+            new BuildingShopItem("tower", "🗼 Вышка", 200, 150, 0, 0),
+            new BuildingShopItem("warehouse", "📦 Склад", 300, 200, 0, 0),
+            new BuildingShopItem("house", "🏠 Дом", 100, 50, 0, 0),
+            new BuildingShopItem("barracks", "🛡️ Казарма", 400, 0, 300, 0)
+    );
     private static final Map<Faction, Set<String>> FAVORITE_TACTICS = Map.of(
             Faction.KNIGHTS, Set.of("PHALANX", "WALL"),
             Faction.SAMURAI, Set.of("SNIPER", "SM_IAIDO"),
@@ -239,7 +246,10 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     ) {
     }
 
-    private record ShopOffer(String code, String title, String resourceKey, int resourceAmount, int goldAmount) {
+    private record ShopOffer(String code, String title, String resourceKey, double buyUnitPrice, double sellUnitPrice) {
+    }
+
+    private record BuildingShopItem(String type, String title, int wood, int stone, int iron, int food) {
     }
 
     @Override
@@ -497,6 +507,10 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
 
+        if (handleShopCustomAmountInput(chatId, tgId, text)) {
+            return;
+        }
+
         if (handleMainMenuText(chatId, tgId, text)) {
             return;
         }
@@ -591,7 +605,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
         if ("/help".equalsIgnoreCase(commandToken) && isPrivate) {
-            sendText(chatId, "📋 Помощь\n/start — 🚀 Начать игру\n/map — 🗺️ Карта вокруг столицы\n/shop — 🛒 Магазин ресурсов\n/sell — 💱 Продажа ресурсов\n/stats — 📊 Статистика королевства\n/legend — 📘 Легенда карты\n/help — 📋 Помощь");
+            sendText(chatId, "📋 Помощь\n/start — 🚀 Начать игру\n/map — 🗺️ Карта вокруг столицы\n/shop — 🛒 Магазин ресурсов\n/sell — 💱 Продажа ресурсов\n/build — 🏗️ Покупка построек\n/stats — 📊 Статистика королевства\n/legend — 📘 Легенда карты\n/help — 📋 Помощь");
             return;
         }
         if ("/map".equalsIgnoreCase(commandToken) && isPrivate) {
@@ -609,7 +623,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 sendText(chatId, "Сначала зарегистрируйся через /start");
                 return;
             }
-            sendText(chatId, "🪓 Открой карту и выбери здание слева");
+            showBuildPurchaseMenu(chatId, p.get());
             return;
         }
         if ("/resources".equalsIgnoreCase(commandToken) && isPrivate) {
@@ -698,7 +712,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 return true;
             }
             case "🏗️ Строить" -> {
-                sendText(chatId, "🪓 Открой карту и выбери здание слева");
+                showBuildPurchaseMenu(chatId, player);
                 return true;
             }
             case "📊 Ресурсы" -> {
@@ -1253,6 +1267,29 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         }
     }
 
+    private boolean handleShopCustomAmountInput(long chatId, long tgId, String text) {
+        if (text == null || text.startsWith("/")) {
+            return false;
+        }
+        Optional<PlayerRecord> playerOpt = registrationService.findRegistered(tgId);
+        if (playerOpt.isEmpty()) {
+            return false;
+        }
+        PlayerRecord player = playerOpt.get();
+        Long waitState = gameDao.getPlayerState(player.id(), STATE_SHOP_AWAIT_CUSTOM);
+        if (waitState == null || waitState != 1L) {
+            return false;
+        }
+
+        int qty = safeParseInt(text.trim(), -1);
+        if (qty <= 0) {
+            sendText(chatId, "Введи число больше нуля.");
+            return true;
+        }
+        executeShopTrade(chatId, player, qty);
+        return true;
+    }
+
     private String mapResourceAlias(String token) {
         if (token == null) {
             return null;
@@ -1439,6 +1476,10 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
         if (data.startsWith("city:")) {
             handleCityCallbacks(chatId, player, data);
+            return;
+        }
+        if (data.startsWith("cbuild:")) {
+            handleConstructionCallbacks(chatId, player, data);
             return;
         }
         if (data.startsWith("build:")) {
@@ -4504,84 +4545,151 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private void sendPlayerStats(long chatId, PlayerRecord player) {
         ResourcesRecord r = gameDao.loadResources(player.id());
-        int kingdomLevel = gameDao.loadKingdom(player.id()).map(GameDao.KingdomState::level).orElse(1);
-        Map<String, Integer> counts = gameDao.loadMapBuildingCounts(player.id());
-        Map<String, Integer> income = gameDao.calculateHourlyMapIncome(player.id());
+        Map<String, Integer> placed = gameDao.loadMapBuildingCounts(player.id());
+        Map<String, Integer> inventoryBuildings = mapBuildingInventoryCounts(gameDao.loadInventory(player.id()));
 
         StringBuilder text = new StringBuilder();
-        text.append("🏰 Королевство ").append(player.villageName()).append("\n");
-        text.append("Уровень: ").append(kingdomLevel).append("\n\n");
-        text.append("📊 Ресурсы:\n");
-        text.append("🪵 Дерево: ").append(r.wood()).append("/").append(r.storageLimit()).append("\n");
-        text.append("🪨 Камень: ").append(r.stone()).append("/").append(r.storageLimit()).append("\n");
-        text.append("⚔️ Железо: ").append(r.iron()).append("/").append(r.storageLimit()).append("\n");
-        text.append("💰 Золото: ").append(r.gold()).append("/").append(r.storageLimit()).append("\n");
-        text.append("🌾 Еда: ").append(r.food()).append("/").append(r.storageLimit()).append("\n");
-        text.append("👥 Люди: ").append(r.population()).append("/").append(r.maxPopulation()).append("\n\n");
+        text.append("📊 КОРОЛЕВСТВО\n\n");
+        text.append("─── РЕСУРСЫ ───\n");
+        text.append("🪵 ").append(r.wood()).append("/").append(r.storageLimit()).append("\n");
+        text.append("🪨 ").append(r.stone()).append("/").append(r.storageLimit()).append("\n");
+        text.append("⚔️ ").append(r.iron()).append("/").append(r.storageLimit()).append("\n");
+        text.append("💰 ").append(r.gold()).append("/").append(r.storageLimit()).append("\n");
+        text.append("🌾 ").append(r.food()).append("/").append(r.storageLimit()).append("\n");
+        text.append("👥 ").append(r.population()).append("/").append(r.maxPopulation()).append("\n\n");
 
-        text.append("🏗️ Постройки:\n");
-        for (String type : List.of("capitol", "lumber", "mine", "farm", "barracks", "tower", "warehouse", "house")) {
-            int count = counts.getOrDefault(type, 0);
-            if (count <= 0) {
-                continue;
+        text.append("─── ИНВЕНТАРЬ ───\n");
+        if (inventoryBuildings.isEmpty()) {
+            text.append("Пусто\n");
+        } else {
+            for (String type : List.of("house", "lumber", "warehouse", "mine", "iron_mine", "farm", "tower", "barracks")) {
+                int count = inventoryBuildings.getOrDefault(type, 0);
+                if (count > 0) {
+                    text.append(buildingEmoji(type)).append(" ").append(buildingTitle(type)).append(" x").append(count).append("\n");
+                }
             }
-            text.append(buildingStatsLine(type, count)).append("\n");
         }
 
-        text.append("\n📈 Добыча в час:\n");
-        text.append("🪵 +").append(income.getOrDefault("wood", 0)).append(" | ");
-        text.append("🪨 +").append(income.getOrDefault("stone", 0)).append(" | ");
-        text.append("⚔️ +").append(income.getOrDefault("iron", 0)).append(" | ");
-        text.append("🌾 +").append(income.getOrDefault("food", 0));
+        text.append("\n─── ПОСТРОЙКИ НА КАРТЕ ───\n");
+        if (placed.isEmpty()) {
+            text.append("Нет построек\n");
+        } else {
+            for (String type : List.of("capitol", "lumber", "mine", "iron_mine", "farm", "tower", "warehouse", "house", "barracks")) {
+                int count = placed.getOrDefault(type, 0);
+                if (count > 0) {
+                    text.append(buildingEmoji(type)).append(" ").append(buildingTitle(type)).append(" (").append(count).append(")\n");
+                }
+            }
+        }
 
         sendText(chatId, text.toString());
     }
 
-    private String buildingStatsLine(String type, int count) {
+    private Map<String, Integer> mapBuildingInventoryCounts(List<KeyValueAmount> inventory) {
+        Map<String, Integer> result = new HashMap<>();
+        for (KeyValueAmount item : inventory) {
+            if (!item.type().startsWith("MAP_BUILD_") || item.quantity() <= 0) {
+                continue;
+            }
+            String type = item.type().substring("MAP_BUILD_".length()).toLowerCase();
+            result.put(type, result.getOrDefault(type, 0) + item.quantity());
+        }
+        return result;
+    }
+
+    private String buildingTitle(String type) {
         return switch (type) {
-            case "capitol" -> "🏰 Ратуша (ур.1)";
-            case "lumber" -> "🪓 Лесопилка x" + count + " (ур.1)";
-            case "mine" -> "⛏️ Шахта x" + count + " (ур.1)";
-            case "farm" -> "🌾 Ферма x" + count + " (ур.1)";
-            case "barracks" -> "⚔️ Казарма x" + count + " (ур.1)";
-            case "tower" -> "🗼 Вышка x" + count + " (ур.1)";
-            case "warehouse" -> "📦 Склад x" + count + " (ур.1)";
-            case "house" -> "🏠 Дом x" + count + " (ур.1)";
-            default -> "🏗️ " + type + " x" + count + " (ур.1)";
+            case "capitol" -> "Ратуша";
+            case "lumber" -> "Лесопилка";
+            case "mine" -> "Шахта";
+            case "iron_mine" -> "Железная шахта";
+            case "farm" -> "Ферма";
+            case "tower" -> "Вышка";
+            case "warehouse" -> "Склад";
+            case "house" -> "Дом";
+            case "barracks" -> "Казарма";
+            default -> type;
         };
+    }
+
+    private String buildingEmoji(String type) {
+        return switch (type) {
+            case "capitol" -> "🏰";
+            case "lumber" -> "🪓";
+            case "mine" -> "⛏️";
+            case "iron_mine" -> "⚔️";
+            case "farm" -> "🌾";
+            case "tower" -> "🗼";
+            case "warehouse" -> "📦";
+            case "house" -> "🏠";
+            case "barracks" -> "🛡️";
+            default -> "🏗️";
+        };
+    }
+
+    private void showBuildPurchaseMenu(long chatId, PlayerRecord player) {
+        ResourcesRecord r = gameDao.loadResources(player.id());
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        for (BuildingShopItem item : BUILDING_SHOP_ITEMS) {
+            rows.add(List.of(btn(item.title() + " (" + buildCostText(item) + ")", "cbuild:buy:" + item.type())));
+        }
+        rows.add(List.of(btn("◀️ Назад", "shop:close")));
+        sendText(chatId,
+                "🏗️ СТРОИТЕЛЬСТВО\n\n" +
+                        "💰 Баланс: 🪵" + r.wood() + " 🪨" + r.stone() + " ⚔️" + r.iron() + " 🌾" + r.food() + "\n\n" +
+                        "Выбери что построить:",
+                InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private String buildCostText(BuildingShopItem item) {
+        List<String> parts = new ArrayList<>();
+        if (item.wood() > 0) parts.add(item.wood() + "🪵");
+        if (item.stone() > 0) parts.add(item.stone() + "🪨");
+        if (item.iron() > 0) parts.add(item.iron() + "⚔️");
+        if (item.food() > 0) parts.add(item.food() + "🌾");
+        return String.join("+", parts);
+    }
+
+    private void handleConstructionCallbacks(long chatId, PlayerRecord player, String data) {
+        if (!data.startsWith("cbuild:buy:")) {
+            showBuildPurchaseMenu(chatId, player);
+            return;
+        }
+        String type = data.substring("cbuild:buy:".length());
+        BuildingShopItem item = findBuildingShopItem(type);
+        if (item == null) {
+            sendText(chatId, "Неизвестная постройка.");
+            return;
+        }
+        GameCatalog.Cost cost = new GameCatalog.Cost(item.wood(), item.stone(), item.food(), item.iron(), 0, 0, 0);
+        if (!gameDao.spendResources(player.id(), cost)) {
+            sendText(chatId, "❌ Не хватает ресурсов для покупки.");
+            showBuildPurchaseMenu(chatId, player);
+            return;
+        }
+        gameDao.addInventoryItem(player.id(), "MAP_BUILD_" + type.toUpperCase(), 1);
+        sendText(chatId, "✅ Постройка добавлена в инвентарь. Открой карту и размести.");
+        showBuildPurchaseMenu(chatId, player);
+    }
+
+    private BuildingShopItem findBuildingShopItem(String type) {
+        for (BuildingShopItem item : BUILDING_SHOP_ITEMS) {
+            if (item.type().equalsIgnoreCase(type)) {
+                return item;
+            }
+        }
+        return null;
     }
 
     private void showShopMenu(long chatId, PlayerRecord player) {
         ResourcesRecord r = gameDao.loadResources(player.id());
         List<List<InlineKeyboardButton>> rows = List.of(
-                List.of(
-                        btn("1", "shop:buy:" + SHOP_BUY_OFFERS.get(0).code()),
-                        btn("2", "shop:buy:" + SHOP_BUY_OFFERS.get(1).code()),
-                        btn("3", "shop:buy:" + SHOP_BUY_OFFERS.get(2).code()),
-                        btn("4", "shop:buy:" + SHOP_BUY_OFFERS.get(3).code())
-                ),
-                List.of(
-                        btn("5", "shop:sell:" + SHOP_SELL_OFFERS.get(0).code()),
-                        btn("6", "shop:sell:" + SHOP_SELL_OFFERS.get(1).code()),
-                        btn("7", "shop:sell:" + SHOP_SELL_OFFERS.get(2).code()),
-                        btn("8", "shop:sell:" + SHOP_SELL_OFFERS.get(3).code())
-                ),
-                List.of(btn("❌ Отмена", "shop:close"))
+                List.of(btn("КУПИТЬ", "shop:mode:buy"), btn("ПРОДАТЬ", "shop:mode:sell"))
         );
         sendText(chatId,
                 "🛒 МАГАЗИН РЕСУРСОВ\n\n" +
-                        "💰 Твой баланс: " + r.gold() + " золота\n\n" +
-                        "─── ДОСТУПНО К ПОКУПКЕ ───\n" +
-                        "1️⃣ 🪵 100 дерева = 10💰\n" +
-                        "2️⃣ 🪨 100 камня = 15💰\n" +
-                        "3️⃣ ⚔️ 50 железа = 30💰\n" +
-                        "4️⃣ 🌾 200 еды = 5💰\n\n" +
-                        "─── ПРОДАЖА ───\n" +
-                        "5️⃣ 🪵 100 дерева = 5💰\n" +
-                        "6️⃣ 🪨 100 камня = 8💰\n" +
-                        "7️⃣ ⚔️ 50 железа = 20💰\n" +
-                        "8️⃣ 🌾 200 еды = 2💰\n\n" +
-                        "Выбери цифру для сделки:",
+                        "💰 Твой баланс: " + r.gold() + "💰\n\n" +
+                        "Что хочешь сделать?",
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
@@ -4591,56 +4699,202 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private void handleShopCallbacks(long chatId, PlayerRecord player, String data) {
         if ("shop:close".equals(data)) {
+            clearShopFlowState(player.id());
             sendMainMenu(chatId);
             return;
         }
 
-        if (data.startsWith("shop:buy:")) {
-            String code = data.substring("shop:buy:".length());
-            ShopOffer offer = findOffer(SHOP_BUY_OFFERS, code);
-            if (offer == null) {
-                sendText(chatId, "Неизвестный товар.");
+        if (data.startsWith("shop:mode:")) {
+            String mode = data.substring("shop:mode:".length());
+            if (!"buy".equals(mode) && !"sell".equals(mode)) {
+                sendText(chatId, "Неизвестный режим магазина.");
                 return;
             }
-            boolean paid = gameDao.spendSingleResource(player.id(), "GOLD", offer.goldAmount());
-            if (!paid) {
-                sendText(chatId, "❌ Не хватает золота для покупки.");
-                return;
-            }
-            gameDao.addSingleResource(player.id(), offer.resourceKey(), offer.resourceAmount());
-            sendText(chatId, "✅ Куплено: " + offer.title() + " +" + offer.resourceAmount() + " за " + offer.goldAmount() + "💰");
-            showShopMenu(chatId, player);
+            gameDao.setPlayerState(player.id(), STATE_SHOP_MODE, "buy".equals(mode) ? 1 : 2);
+            gameDao.clearPlayerState(player.id(), STATE_SHOP_RESOURCE);
+            gameDao.clearPlayerState(player.id(), STATE_SHOP_AWAIT_CUSTOM);
+            showShopResourcePicker(chatId, mode);
             return;
         }
 
-        if (data.startsWith("shop:sell:")) {
-            String code = data.substring("shop:sell:".length());
-            ShopOffer offer = findOffer(SHOP_SELL_OFFERS, code);
+        if (data.startsWith("shop:resource:")) {
+            String code = data.substring("shop:resource:".length());
+            ShopOffer offer = findOffer(code);
             if (offer == null) {
-                sendText(chatId, "Неизвестный ресурс для продажи.");
+                sendText(chatId, "Неизвестный ресурс.");
                 return;
             }
-            boolean removed = gameDao.spendSingleResource(player.id(), offer.resourceKey(), offer.resourceAmount());
-            if (!removed) {
-                sendText(chatId, "❌ Недостаточно ресурса для продажи.");
+            gameDao.setPlayerState(player.id(), STATE_SHOP_RESOURCE, shopCodeToState(code));
+            gameDao.clearPlayerState(player.id(), STATE_SHOP_AWAIT_CUSTOM);
+            showShopAmountPicker(chatId, player);
+            return;
+        }
+
+        if (data.startsWith("shop:qty:")) {
+            String raw = data.substring("shop:qty:".length());
+            if ("custom".equals(raw)) {
+                gameDao.setPlayerState(player.id(), STATE_SHOP_AWAIT_CUSTOM, 1);
+                sendText(chatId, "Введи количество цифрами в чат:");
                 return;
             }
-            gameDao.addSingleResource(player.id(), "GOLD", offer.goldAmount());
-            sendText(chatId, "✅ Продано: " + offer.title() + " -" + offer.resourceAmount() + ", получено +" + offer.goldAmount() + "💰");
-            showSellMenu(chatId, player);
+            if ("all".equals(raw)) {
+                int qty = calculateMaxTradeQty(player.id());
+                if (qty <= 0) {
+                    sendText(chatId, "❌ Невозможно выполнить сделку на текущем балансе.");
+                    return;
+                }
+                executeShopTrade(chatId, player, qty);
+                return;
+            }
+            int qty = safeParseInt(raw, -1);
+            if (qty <= 0) {
+                sendText(chatId, "Некорректное количество.");
+                return;
+            }
+            executeShopTrade(chatId, player, qty);
+            return;
+        }
+
+        if ("shop:back:mode".equals(data)) {
+            showShopMenu(chatId, player);
+            return;
+        }
+        if ("shop:back:resource".equals(data)) {
+            Long mode = gameDao.getPlayerState(player.id(), STATE_SHOP_MODE);
+            showShopResourcePicker(chatId, mode != null && mode == 2L ? "sell" : "buy");
             return;
         }
 
         sendText(chatId, "Неизвестное действие магазина.");
     }
 
-    private ShopOffer findOffer(List<ShopOffer> offers, String code) {
-        for (ShopOffer offer : offers) {
-            if (offer.code().equalsIgnoreCase(code)) {
-                return offer;
-            }
+    private void showShopResourcePicker(long chatId, String mode) {
+        sendText(chatId,
+                "❓ Что " + ("buy".equals(mode) ? "покупаем" : "продаем") + "?",
+                InlineKeyboardMarkup.builder()
+                        .keyboardRow(List.of(btn("🪵 Дерево", "shop:resource:wood"), btn("🪨 Камень", "shop:resource:stone")))
+                        .keyboardRow(List.of(btn("⚔️ Железо", "shop:resource:iron"), btn("🌾 Еда", "shop:resource:food")))
+                        .keyboardRow(List.of(btn("🔙 Назад", "shop:back:mode")))
+                        .build());
+    }
+
+    private void showShopAmountPicker(long chatId, PlayerRecord player) {
+        ShopOffer offer = resolveShopOffer(player.id());
+        if (offer == null) {
+            sendText(chatId, "Сначала выбери ресурс.");
+            return;
+        }
+        sendText(chatId,
+                "❓ Сколько " + offer.title() + "?",
+                InlineKeyboardMarkup.builder()
+                        .keyboardRow(List.of(btn("100", "shop:qty:100"), btn("500", "shop:qty:500"), btn("1000", "shop:qty:1000")))
+                        .keyboardRow(List.of(btn("ВСЁ", "shop:qty:all"), btn("Своё число", "shop:qty:custom"), btn("🔙 Назад", "shop:back:resource")))
+                        .build());
+    }
+
+    private ShopOffer resolveShopOffer(long playerId) {
+        Long code = gameDao.getPlayerState(playerId, STATE_SHOP_RESOURCE);
+        if (code == null) {
+            return null;
+        }
+        return findOffer(shopStateToCode(code));
+    }
+
+    private ShopOffer findOffer(String code) {
+        for (ShopOffer offer : SHOP_OFFERS) {
+            if (offer.code().equalsIgnoreCase(code)) return offer;
         }
         return null;
+    }
+
+    private long shopCodeToState(String code) {
+        return switch (code) {
+            case "wood" -> 1;
+            case "stone" -> 2;
+            case "iron" -> 3;
+            case "food" -> 4;
+            default -> 0;
+        };
+    }
+
+    private String shopStateToCode(long state) {
+        return switch ((int) state) {
+            case 1 -> "wood";
+            case 2 -> "stone";
+            case 3 -> "iron";
+            case 4 -> "food";
+            default -> "";
+        };
+    }
+
+    private void executeShopTrade(long chatId, PlayerRecord player, int qty) {
+        Long mode = gameDao.getPlayerState(player.id(), STATE_SHOP_MODE);
+        ShopOffer offer = resolveShopOffer(player.id());
+        if (offer == null || mode == null) {
+            sendText(chatId, "Сначала выбери режим и ресурс.");
+            showShopMenu(chatId, player);
+            return;
+        }
+        int amount = Math.max(1, qty);
+        if (mode == 1L) {
+            int goldCost = (int) Math.ceil(amount * offer.buyUnitPrice());
+            if (!gameDao.spendSingleResource(player.id(), "GOLD", goldCost)) {
+                sendText(chatId, "❌ Не хватает золота.");
+                return;
+            }
+            gameDao.addSingleResource(player.id(), offer.resourceKey(), amount);
+            sendText(chatId, "✅ Куплено: " + offer.title() + " +" + amount + " за " + goldCost + "💰");
+        } else if (mode == 2L) {
+            int goldGain = (int) Math.floor(amount * offer.sellUnitPrice());
+            if (goldGain <= 0) {
+                sendText(chatId, "❌ Слишком маленькое количество для продажи.");
+                return;
+            }
+            if (!gameDao.spendSingleResource(player.id(), offer.resourceKey(), amount)) {
+                sendText(chatId, "❌ Недостаточно ресурса для продажи.");
+                return;
+            }
+            gameDao.addSingleResource(player.id(), "GOLD", goldGain);
+            sendText(chatId, "✅ Продано: " + offer.title() + " -" + amount + ", получено +" + goldGain + "💰");
+        }
+        gameDao.clearPlayerState(player.id(), STATE_SHOP_AWAIT_CUSTOM);
+        showShopMenu(chatId, player);
+    }
+
+    private int calculateMaxTradeQty(long playerId) {
+        ShopOffer offer = resolveShopOffer(playerId);
+        Long mode = gameDao.getPlayerState(playerId, STATE_SHOP_MODE);
+        if (offer == null || mode == null) {
+            return 0;
+        }
+        ResourcesRecord r = gameDao.loadResources(playerId);
+        if (mode == 1L) {
+            int byGold = (int) Math.floor(r.gold() / offer.buyUnitPrice());
+            int byStorage = switch (offer.resourceKey()) {
+                case "WOOD" -> Math.max(0, r.storageLimit() - r.wood());
+                case "STONE" -> Math.max(0, r.storageLimit() - r.stone());
+                case "IRON" -> Math.max(0, r.storageLimit() - r.iron());
+                case "FOOD" -> Math.max(0, r.storageLimit() - r.food());
+                default -> byGold;
+            };
+            return Math.max(0, Math.min(byGold, byStorage));
+        }
+        if (mode == 2L) {
+            return switch (offer.resourceKey()) {
+                case "WOOD" -> r.wood();
+                case "STONE" -> r.stone();
+                case "IRON" -> r.iron();
+                case "FOOD" -> r.food();
+                default -> 0;
+            };
+        }
+        return 0;
+    }
+
+    private void clearShopFlowState(long playerId) {
+        gameDao.clearPlayerState(playerId, STATE_SHOP_MODE);
+        gameDao.clearPlayerState(playerId, STATE_SHOP_RESOURCE);
+        gameDao.clearPlayerState(playerId, STATE_SHOP_AWAIT_CUSTOM);
     }
 
     private void sendMapButton(Long chatId) {
