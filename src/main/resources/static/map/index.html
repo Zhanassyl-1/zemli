@@ -23,171 +23,110 @@
             display: block;
             width: 100vw;
             height: 100vh;
-            background: #0a2f6a;
-            cursor: crosshair;
+            background: #000;
+            cursor: grab;
         }
 
-        /* Панель построек */
-        .build-panel {
+        #gameCanvas:active {
+            cursor: grabbing;
+        }
+
+        .controls {
             position: fixed;
-            left: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: rgba(20, 20, 20, 0.95);
-            border: 2px solid #444;
-            border-radius: 15px;
-            padding: 15px;
-            color: white;
-            z-index: 1000;
-            backdrop-filter: blur(10px);
-            min-width: 200px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-
-        .build-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 15px;
-            text-align: center;
-            color: #ffd700;
-            border-bottom: 1px solid #444;
-            padding-bottom: 8px;
-        }
-
-        .build-buttons {
+            bottom: 20px;
+            right: 20px;
             display: flex;
-            flex-direction: column;
-            gap: 8px;
+            gap: 10px;
+            z-index: 1000;
         }
 
-        .build-btn {
-            background: #2a2a2a;
-            border: 1px solid #555;
+        .controls button {
+            width: 50px;
+            height: 50px;
+            border-radius: 25px;
+            background: rgba(30, 30, 30, 0.9);
             color: white;
-            padding: 12px 15px;
-            border-radius: 8px;
-            font-size: 16px;
+            border: 2px solid #444;
+            font-size: 24px;
+            font-weight: bold;
             cursor: pointer;
             transition: all 0.2s;
-            text-align: left;
-            font-family: 'Courier New', monospace;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
 
-        .build-btn:hover {
-            background: #3a3a3a;
-            border-color: #888;
+        .controls button:hover {
+            background: #444;
+            border-color: #666;
+            transform: scale(1.1);
         }
 
-        .build-btn.selected {
-            background: #2a4a6a;
-            border-color: #6aaaff;
-            box-shadow: 0 0 10px #2a4a6a;
-        }
-
-        .selected-info {
-            margin-top: 15px;
-            padding: 10px;
-            background: #1a1a1a;
-            border-radius: 8px;
+        .controls button#toBuilding {
+            width: auto;
+            padding: 0 12px;
             font-size: 14px;
-            color: #aaddff;
-            text-align: center;
-            border: 1px solid #333;
+            background: #5f5f5f;
+            border-color: #8b8b8b;
         }
 
-        .coordinates, .biome-info, .title {
+        .controls button#toBuilding:hover {
+            background: #767676;
+        }
+
+        .coordinates {
             position: fixed;
-            color: white;
+            bottom: 20px;
+            left: 20px;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-family: monospace;
+            border: 1px solid #444;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+
+        .biome-info {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: #fff;
             background: rgba(0, 0, 0, 0.7);
             padding: 8px 16px;
             border-radius: 20px;
             font-size: 14px;
             border: 1px solid #444;
-            backdrop-filter: blur(5px);
             z-index: 1000;
-        }
-
-        .biome-info {
-            top: 20px;
-            left: 20px;
+            backdrop-filter: blur(5px);
         }
 
         .title {
+            position: fixed;
             top: 20px;
             right: 20px;
-            font-weight: bold;
+            color: #fff;
             background: rgba(0, 0, 0, 0.5);
-        }
-
-        .coordinates {
-            bottom: 20px;
-            left: 20px;
-        }
-
-        @media (max-width: 768px) {
-            .build-panel {
-                left: 10px;
-                padding: 10px;
-                min-width: 150px;
-            }
-            .build-btn {
-                padding: 8px 12px;
-                font-size: 14px;
-            }
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border: 1px solid #444;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
         }
     </style>
-    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="title">🗺️ ZEMLI</div>
-    <div class="biome-info" id="biomeInfo">🌊 Океан</div>
+    <div class="biome-info" id="biomeInfo">Равнина</div>
     <div class="coordinates" id="coords">X: 0, Y: 0</div>
-    <div class="home-info" id="homeInfo"></div>
 
     <div class="controls">
         <button id="zoomIn">+</button>
         <button id="zoomOut">-</button>
-        <button id="home">🏰 Домой</button>
+        <button id="center">🏠</button>
         <button id="toBuilding">🏠 К зданию</button>
-    </div>
-
-    <div class="action-panel" id="actionPanel">
-        <button class="action-btn" id="actionBuild">🏗️ Построить</button>
-        <button class="action-btn" id="actionMove">🚚 Переместить</button>
-        <button class="action-btn" id="actionArmy">⚔️ Армия</button>
-        <button class="action-btn" id="actionHome">🏠 К зданию</button>
-    </div>
-
-    <!-- Панель зданий (слева) -->
-    <div class="build-panel" id="buildPanel">
-        <div class="panel-title">🏗️ Строительство</div>
-        <div class="panel-buttons">
-            <button class="emoji-btn" data-type="capitol">🏰</button>
-            <button class="emoji-btn" data-type="lumber">🪓</button>
-            <button class="emoji-btn" data-type="mine">⛏️</button>
-            <button class="emoji-btn" data-type="farm">🌾</button>
-            <button class="emoji-btn" data-type="barracks">⚔️</button>
-            <button class="emoji-btn" data-type="wall">🧱</button>
-            <button class="emoji-btn" data-type="tower">🗼</button>
-            <button class="emoji-btn" data-type="gold">💰</button>
-            <button class="emoji-btn" data-type="stable">🐎</button>
-            <button class="emoji-btn" data-type="library">📚</button>
-            <button class="emoji-btn" data-type="tavern">🍺</button>
-        </div>
-    </div>
-
-    <!-- Панель войск (справа) -->
-    <div class="army-panel" id="armyPanel">
-        <div class="panel-title">⚔️ Войска</div>
-        <div class="panel-buttons">
-            <button class="emoji-btn" data-type="recruit">🛡️</button>
-            <button class="emoji-btn" data-type="archer">🏹</button>
-            <button class="emoji-btn" data-type="cavalry">🐎</button>
-            <button class="emoji-btn" data-type="heal">💊</button>
-        </div>
     </div>
 
     <canvas id="gameCanvas"></canvas>

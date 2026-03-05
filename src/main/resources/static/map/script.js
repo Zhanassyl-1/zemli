@@ -8,6 +8,13 @@ const CENTER_Y = Math.floor(MAP_HEIGHT / 2);
 let cameraX = CENTER_X * TILE_SIZE - window.innerWidth / 2;
 let cameraY = CENTER_Y * TILE_SIZE - window.innerHeight / 2;
 let scale = 0.7;
+const SPECIAL_BUILDING = {
+  x: 12,
+  y: 8,
+  width: 2,
+  height: 2,
+  color: '#8B8B8B'
+};
 
 const tg = window.Telegram?.WebApp;
 if (tg) {
@@ -18,25 +25,6 @@ if (tg) {
   tg.ready();
   console.log("✅ Telegram WebApp активен");
 }
-
-const API_BASE = window.location.hostname === 'zhanassyl-1.github.io'
-  ? 'https://zemli.railway.app'
-  : '';
-
-const TELEGRAM_USER_ID = Number(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 0);
-let selectedBuilding = null;
-let loadedBuildings = [];
-let homeX = 0;
-let homeY = 0;
-let mapCanvas = null;
-let actionMode = null;
-const SPECIAL_BUILDING = {
-  x: 12,
-  y: 8,
-  width: 2,
-  height: 2,
-  color: '#8B8B8B'
-};
 
 const BIOME = {
   OCEAN: 0,
@@ -62,38 +50,6 @@ const COLORS = {
 
 const biomeMap = new Uint8Array(MAP_WIDTH * MAP_HEIGHT);
 const elevationMap = new Float32Array(MAP_WIDTH * MAP_HEIGHT);
-
-const BUILDING_ICONS = {
-  capitol: '🏰',
-  lumber: '🪓',
-  mine: '⛏️',
-  farm: '🌾',
-  barracks: '⚔️',
-  wall: '🧱',
-  tower: '🗼',
-  gold: '💰',
-  stable: '🐎',
-  library: '📚',
-  tavern: '🍺'
-};
-
-function normalizeBuildingType(rawType) {
-  return (rawType || '').toLowerCase();
-}
-
-function setHome(x, y) {
-  homeX = x;
-  homeY = y;
-  console.log(`🏠 Дом установлен на (${x}, ${y})`);
-}
-
-function centerCameraOnRelativeArea(relX, relY, width = 1, height = 1) {
-  const tile = TILE_SIZE * scale;
-  const worldCenterX = relX + CENTER_X + (width / 2);
-  const worldCenterY = relY + CENTER_Y + (height / 2);
-  cameraX = worldCenterX * tile - window.innerWidth / 2;
-  cameraY = worldCenterY * tile - window.innerHeight / 2;
-}
 
 function idx(x, y) {
   return y * MAP_WIDTH + x;
@@ -271,17 +227,17 @@ function biomeName(code) {
   }
 }
 
-function getBiome(tileX, tileY) {
-  const wx = tileX + CENTER_X;
-  const wy = tileY + CENTER_Y;
-  const inside = wx >= 0 && wy >= 0 && wx < MAP_WIDTH && wy < MAP_HEIGHT;
-  const b = inside ? biomeMap[idx(wx, wy)] : BIOME.OCEAN;
-  return biomeName(b);
+function centerCameraOnRelativeArea(relX, relY, width = 1, height = 1) {
+  const tile = TILE_SIZE * scale;
+  const worldCenterX = relX + CENTER_X + (width / 2);
+  const worldCenterY = relY + CENTER_Y + (height / 2);
+  cameraX = worldCenterX * tile - window.innerWidth / 2;
+  cameraY = worldCenterY * tile - window.innerHeight / 2;
 }
 
 function drawMap(ctx, canvas) {
   const tile = TILE_SIZE * scale;
-  if (tile <= 0.01) return null;
+  if (tile <= 0.01) return;
 
   let startCol = Math.floor(cameraX / tile);
   let startRow = Math.floor(cameraY / tile);
@@ -305,103 +261,26 @@ function drawMap(ctx, canvas) {
     }
   }
 
-  if (homeX !== 0 || homeY !== 0) {
-    const screenX = ((homeX + CENTER_X) * TILE_SIZE * scale) - cameraX;
-    const screenY = ((homeY + CENTER_Y) * TILE_SIZE * scale) - cameraY;
-    ctx.font = `${TILE_SIZE * scale * 1.5}px 'Courier New'`;
-    ctx.fillStyle = '#FFD700';
-    ctx.fillText('🏰', screenX, screenY + TILE_SIZE * scale);
-
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(
-      screenX + TILE_SIZE * scale / 2,
-      screenY + TILE_SIZE * scale / 2,
-      TILE_SIZE * scale,
-      0,
-      Math.PI * 2
-    );
-    ctx.stroke();
-  }
-
-  return { startCol, startRow, endCol, endRow };
-}
-
-function drawSpecialBuilding(ctx, canvas) {
-  const tile = TILE_SIZE * scale;
-  if (tile <= 0.01) return;
-
-  const worldX = SPECIAL_BUILDING.x + CENTER_X;
-  const worldY = SPECIAL_BUILDING.y + CENTER_Y;
-  const drawX = worldX * tile - cameraX;
-  const drawY = worldY * tile - cameraY;
-  const widthPx = SPECIAL_BUILDING.width * tile;
-  const heightPx = SPECIAL_BUILDING.height * tile;
+  const buildingWorldX = SPECIAL_BUILDING.x + CENTER_X;
+  const buildingWorldY = SPECIAL_BUILDING.y + CENTER_Y;
+  const buildingDrawX = buildingWorldX * tile - cameraX;
+  const buildingDrawY = buildingWorldY * tile - cameraY;
+  const buildingW = SPECIAL_BUILDING.width * tile;
+  const buildingH = SPECIAL_BUILDING.height * tile;
 
   if (
-    drawX > canvas.width ||
-    drawY > canvas.height ||
-    drawX + widthPx < 0 ||
-    drawY + heightPx < 0
+    !(buildingDrawX > canvas.width ||
+      buildingDrawY > canvas.height ||
+      buildingDrawX + buildingW < 0 ||
+      buildingDrawY + buildingH < 0)
   ) {
-    return;
-  }
+    const stickerX = buildingDrawX + buildingW / 2;
+    const stickerY = buildingDrawY + buildingH / 2;
+    const stickerRadius = Math.max(8, tile * 0.52);
+    const stickerSize = Math.max(20, tile * 1.05);
 
-  ctx.fillStyle = SPECIAL_BUILDING.color;
-  ctx.fillRect(drawX, drawY, widthPx, heightPx);
-
-  ctx.strokeStyle = '#5f5f5f';
-  ctx.lineWidth = Math.max(1, tile * 0.08);
-  ctx.strokeRect(drawX, drawY, widthPx, heightPx);
-}
-
-function drawBuildings(ctx, startCol, startRow, endCol, endRow) {
-  const canvas = mapCanvas;
-  if (!canvas) return;
-  const tile = TILE_SIZE * scale;
-  if (tile <= 0.01) return;
-
-  const buildings = (Array.isArray(window.buildings) && window.buildings.length)
-    ? window.buildings
-    : loadedBuildings;
-  console.log("🎨 Рисую здания, количество:", buildings.length);
-  if (!buildings.length) return;
-
-  for (const b of buildings) {
-    console.log("Здание:", b.x, b.y, b.type);
-    const worldCol = b.x + CENTER_X;
-    const worldRow = b.y + CENTER_Y;
-    if (worldCol < 0 || worldCol >= MAP_WIDTH || worldRow < 0 || worldRow >= MAP_HEIGHT) continue;
-    if (worldCol < startCol - 2 || worldCol > endCol + 2 || worldRow < startRow - 2 || worldRow > endRow + 2) continue;
-
-    const screenX = ((b.x + CENTER_X) * TILE_SIZE * scale) - cameraX;
-    const screenY = ((b.y + CENTER_Y) * TILE_SIZE * scale) - cameraY;
-    if (screenX <= -50 || screenX >= canvas.width + 50 || screenY <= -50 || screenY >= canvas.height + 50) continue;
-
-    const type = normalizeBuildingType(b.type);
-    const emojiMap = {
-      capitol: '🏰',
-      lumber: '🪓',
-      mine: '⛏️',
-      farm: '🌾',
-      barracks: '⚔️',
-      wall: '🧱',
-      tower: '🗼',
-      gold: '💰',
-      stable: '🐎',
-      library: '📚',
-      tavern: '🍺'
-    };
-    const emoji = emojiMap[type] || BUILDING_ICONS[type] || '🏠';
-
-    const stickerX = screenX + tile / 2;
-    const stickerY = screenY + tile / 2;
-    const stickerSize = Math.max(20, tile * 0.92);
-
-    // Sticker-style badge under emoji
     ctx.beginPath();
-    ctx.arc(stickerX, stickerY, Math.max(8, tile * 0.45), 0, Math.PI * 2);
+    ctx.arc(stickerX, stickerY, stickerRadius, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
     ctx.fill();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.24)';
@@ -412,7 +291,7 @@ function drawBuildings(ctx, startCol, startRow, endCol, endRow) {
     ctx.textBaseline = 'middle';
     ctx.font = `${stickerSize}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Courier New",sans-serif`;
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(emoji, stickerX, stickerY + tile * 0.02);
+    ctx.fillText('🏰', stickerX, stickerY + tile * 0.02);
   }
 }
 
@@ -423,93 +302,8 @@ window.onload = function () {
 
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
-  mapCanvas = canvas;
   const biomeInfo = document.getElementById('biomeInfo');
   const coordsEl = document.getElementById('coords');
-
-  document.querySelectorAll('.emoji-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      selectedBuilding = btn.dataset.type;
-    });
-  });
-
-  function setActionMode(mode, buttonId, label) {
-    actionMode = mode;
-    document.querySelectorAll('.action-btn').forEach(b => b.classList.remove('active'));
-    const button = document.getElementById(buttonId);
-    if (button) {
-      button.classList.add('active');
-    }
-    console.log(label);
-  }
-
-  const actionBuild = document.getElementById('actionBuild');
-  const actionMove = document.getElementById('actionMove');
-  const actionArmy = document.getElementById('actionArmy');
-  const actionHome = document.getElementById('actionHome');
-
-  if (actionBuild) {
-    actionBuild.addEventListener('click', () => {
-      setActionMode('build', 'actionBuild', '🏗️ Режим строительства');
-    });
-  }
-
-  if (actionMove) {
-    actionMove.addEventListener('click', () => {
-      setActionMode('move', 'actionMove', '🚚 Режим перемещения');
-    });
-  }
-
-  if (actionArmy) {
-    actionArmy.addEventListener('click', () => {
-      setActionMode('army', 'actionArmy', '⚔️ Режим армии');
-    });
-  }
-
-  if (actionHome) {
-    actionHome.addEventListener('click', () => {
-      if (window.buildings && window.buildings.length > 0) {
-        const home = window.buildings[0];
-        cameraX = ((home.x + CENTER_X) * TILE_SIZE * scale) - canvas.width / 2;
-        cameraY = ((home.y + CENTER_Y) * TILE_SIZE * scale) - canvas.height / 2;
-      }
-    });
-  }
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected'));
-    selectedBuilding = null;
-  });
-
-  async function loadBuildings() {
-    const tile = TILE_SIZE * scale;
-    const startCol = Math.floor(cameraX / tile) - 2;
-    const startRow = Math.floor(cameraY / tile) - 2;
-    const endCol = startCol + Math.ceil(canvas.width / tile) + 4;
-    const endRow = startRow + Math.ceil(canvas.height / tile) + 4;
-
-    const x1 = startCol - CENTER_X;
-    const y1 = startRow - CENTER_Y;
-    const x2 = endCol - CENTER_X;
-    const y2 = endRow - CENTER_Y;
-
-    try {
-      const response = await fetch(`${API_BASE}/api/buildings?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}`);
-      if (!response.ok) return;
-      loadedBuildings = await response.json();
-      window.buildings = loadedBuildings;
-      console.log("Загружено зданий:", loadedBuildings.length);
-      if (homeX === 0 && homeY === 0) {
-        const capitol = loadedBuildings.find(b => normalizeBuildingType(b.type) === 'capitol');
-        if (capitol) setHome(capitol.x, capitol.y);
-      }
-    } catch (error) {
-      console.error('Не удалось загрузить постройки:', error);
-    }
-  }
 
   function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -520,63 +314,27 @@ window.onload = function () {
   resizeCanvas();
 
   let isDragging = false;
-  let lastX;
-  let lastY;
+  let lastX = 0;
+  let lastY = 0;
 
-  function handleStart(e) {
-    e.preventDefault();
+  canvas.addEventListener('mousedown', (e) => {
     isDragging = true;
-    const clientX = e.clientX ?? e.touches[0].clientX;
-    const clientY = e.clientY ?? e.touches[0].clientY;
-    lastX = clientX;
-    lastY = clientY;
-  }
+    lastX = e.clientX;
+    lastY = e.clientY;
+  });
 
-  function handleMove(e) {
+  window.addEventListener('mousemove', (e) => {
     if (!isDragging) return;
-    e.preventDefault();
-    const clientX = e.clientX ?? e.touches[0].clientX;
-    const clientY = e.clientY ?? e.touches[0].clientY;
-
-    const dx = clientX - lastX;
-    const dy = clientY - lastY;
-
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
     cameraX -= dx;
     cameraY -= dy;
+    lastX = e.clientX;
+    lastY = e.clientY;
+  });
 
-    lastX = clientX;
-    lastY = clientY;
-  }
-
-  function handleEnd(e) {
-    e.preventDefault();
+  window.addEventListener('mouseup', () => {
     isDragging = false;
-  }
-
-  canvas.addEventListener('mousedown', handleStart);
-  canvas.addEventListener('mousemove', handleMove);
-  canvas.addEventListener('mouseup', handleEnd);
-  canvas.addEventListener('mouseleave', handleEnd);
-  canvas.addEventListener('touchstart', handleStart, { passive: false });
-  canvas.addEventListener('touchmove', handleMove, { passive: false });
-  canvas.addEventListener('touchend', handleEnd);
-  canvas.addEventListener('touchcancel', handleEnd);
-
-  canvas.addEventListener('touchstart', (e) => {
-    const touch = e.touches[0];
-    const rect = canvas.getBoundingClientRect();
-    const touchX = touch.clientX - rect.left;
-    const touchY = touch.clientY - rect.top;
-
-    const worldX = (touchX + cameraX) / (TILE_SIZE * scale);
-    const worldY = (touchY + cameraY) / (TILE_SIZE * scale);
-
-    const tileX = Math.floor(worldX) - CENTER_X;
-    const tileY = Math.floor(worldY) - CENTER_Y;
-
-    const biome = getBiome(tileX, tileY);
-    document.getElementById('coords').textContent = `X: ${tileX}, Y: ${tileY}`;
-    document.getElementById('biomeInfo').textContent = biome;
   });
 
   canvas.addEventListener('mousemove', (e) => {
@@ -612,84 +370,16 @@ window.onload = function () {
     cameraY = (worldY * TILE_SIZE * scale) - mouseY;
   });
 
-  canvas.addEventListener('click', async (e) => {
-    if (!actionMode) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const worldX = (mouseX + cameraX) / (TILE_SIZE * scale);
-    const worldY = (mouseY + cameraY) / (TILE_SIZE * scale);
-
-    const tileX = Math.floor(worldX) - CENTER_X;
-    const tileY = Math.floor(worldY) - CENTER_Y;
-
-    if (actionMode === 'move') {
-      console.log(`🚚 Переместить в (${tileX}, ${tileY})`);
-      return;
-    }
-    if (actionMode === 'army') {
-      console.log(`⚔️ Отправить армию на (${tileX}, ${tileY})`);
-      return;
-    }
-    if (actionMode !== 'build') {
-      return;
-    }
-    if (!selectedBuilding) {
-      console.log(`🏗️ Построить на (${tileX}, ${tileY})`);
-      return;
-    }
-    if (!TELEGRAM_USER_ID) {
-      alert('❌ Не удалось определить Telegram userId');
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE}/api/build`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: TELEGRAM_USER_ID,
-          x: tileX,
-          y: tileY,
-          type: selectedBuilding,
-          building: selectedBuilding
-        })
-      });
-
-      if (!response.ok) {
-        alert('❌ Нельзя построить здесь');
-        return;
-      }
-
-      console.log(`✅ Построено ${selectedBuilding} на (${tileX}, ${tileY})`);
-      if (selectedBuilding === 'capitol') {
-        setHome(tileX, tileY);
-      }
-      document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected'));
-      selectedBuilding = null;
-      await loadBuildings();
-    } catch (error) {
-      console.error('Ошибка строительства:', error);
-    }
-  });
-
   const zoomIn = document.getElementById('zoomIn');
   const zoomOut = document.getElementById('zoomOut');
-  const home = document.getElementById('home');
+  const center = document.getElementById('center');
   const toBuilding = document.getElementById('toBuilding');
-  const homeInfo = document.getElementById('homeInfo');
 
   if (zoomIn) zoomIn.onclick = () => { scale *= 1.4; };
   if (zoomOut) zoomOut.onclick = () => { scale /= 1.4; };
-  if (home) home.onclick = () => {
-    centerCameraOnRelativeArea(homeX, homeY, 1, 1);
-    if (homeInfo) {
-      homeInfo.textContent = `🏰 Дом: (${homeX}, ${homeY})`;
-      setTimeout(() => {
-        homeInfo.textContent = '';
-      }, 2000);
-    }
+  if (center) center.onclick = () => {
+    cameraX = CENTER_X * TILE_SIZE - window.innerWidth / 2;
+    cameraY = CENTER_Y * TILE_SIZE - window.innerHeight / 2;
   };
   if (toBuilding) toBuilding.onclick = () => {
     centerCameraOnRelativeArea(
@@ -698,25 +388,11 @@ window.onload = function () {
       SPECIAL_BUILDING.width,
       SPECIAL_BUILDING.height
     );
-    if (homeInfo) {
-      homeInfo.textContent = `🏠 Здание: (${SPECIAL_BUILDING.x}, ${SPECIAL_BUILDING.y})`;
-      setTimeout(() => {
-        homeInfo.textContent = '';
-      }, 2000);
-    }
   };
-
-  loadBuildings();
-  setInterval(loadBuildings, 2000);
 
   function animate() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const visible = drawMap(ctx, canvas);
-    drawSpecialBuilding(ctx, canvas);
-    // Здания рисуются после биомов карты.
-    if (visible) {
-      drawBuildings(ctx, visible.startCol, visible.startRow, visible.endCol, visible.endRow);
-    }
+    drawMap(ctx, canvas);
     requestAnimationFrame(animate);
   }
 
