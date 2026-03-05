@@ -7,7 +7,9 @@ const CENTER_Y = Math.floor(MAP_HEIGHT / 2);
 
 const API_BASE = "";
 const tg = window.Telegram?.WebApp;
-const TELEGRAM_USER_ID = Number(tg?.initDataUnsafe?.user?.id || 0);
+const playerId = Number(tg?.initDataUnsafe?.user?.id || 0);
+console.log("Player ID:", playerId);
+const TELEGRAM_USER_ID = playerId;
 const URL_PLAYER_ID = Number(new URLSearchParams(window.location.search).get("playerId") || 0);
 const ACTIVE_PLAYER_ID = URL_PLAYER_ID || TELEGRAM_USER_ID;
 const USER_KEY = TELEGRAM_USER_ID > 0 ? String(TELEGRAM_USER_ID) : "guest";
@@ -283,7 +285,7 @@ function findCapitol() {
   return cap || null;
 }
 
-async function buildBuilding(x, y, type) {
+async function placeBuilding(x, y, type) {
   if (!ACTIVE_PLAYER_ID) {
     console.warn("No Telegram user id; build is disabled.");
     return false;
@@ -291,13 +293,21 @@ async function buildBuilding(x, y, type) {
   const res = await fetch(`${API_BASE}/api/build`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ x, y, type, userId: ACTIVE_PLAYER_ID, building: type })
+    body: JSON.stringify({
+      playerId: ACTIVE_PLAYER_ID,
+      userId: ACTIVE_PLAYER_ID,
+      x,
+      y,
+      type,
+      building: type
+    })
   });
   if (!res.ok) {
     const msg = await res.text();
     console.warn("Build failed", res.status, msg);
     return false;
   }
+  await loadGameState();
   return true;
 }
 
@@ -314,25 +324,25 @@ function normalizeInventoryPayload(rawInventory) {
 async function loadGameState() {
   if (!ACTIVE_PLAYER_ID) return;
 
-  const endpoints = [
-    `${API_BASE}/api/game/state?playerId=${ACTIVE_PLAYER_ID}`,
-    `${API_BASE}/api/state?userId=${ACTIVE_PLAYER_ID}`
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const state = await res.json();
-      loadedBuildings = Array.isArray(state.buildings) ? state.buildings : [];
-      inventory = normalizeInventoryPayload(state.inventory || state.buildInventory);
-      gameResources = state.resources || null;
-      window.buildings = loadedBuildings;
-      renderInventoryPanel();
+  try {
+    const res = await fetch(`${API_BASE}/api/game/state?playerId=${ACTIVE_PLAYER_ID}`);
+    if (!res.ok) {
+      console.warn("State load failed", res.status);
       return;
-    } catch (e) {
-      console.warn("State load failed", url, e);
     }
+    const data = await res.json();
+    loadedBuildings = Array.isArray(data.buildings) ? data.buildings : [];
+    inventory = normalizeInventoryPayload(data.inventory || {});
+    gameResources = data.resources || null;
+    window.buildings = loadedBuildings;
+    window.inventory = inventory;
+    window.resources = gameResources;
+    renderInventoryPanel();
+    if (mapCtx && mapCanvas) {
+      drawMap(mapCtx, mapCanvas);
+    }
+  } catch (e) {
+    console.warn("State load failed", e);
   }
 }
 
@@ -560,14 +570,13 @@ async function onMapClick(relX, relY) {
       return;
     }
 
-    const placed = await buildBuilding(relX, relY, selectedBuilding);
+    const placed = await placeBuilding(relX, relY, selectedBuilding);
     if (placed) {
       inventory[selectedBuilding] = Math.max(0, Number(inventory[selectedBuilding]) - 1);
       if (inventory[selectedBuilding] === 0) {
         delete inventory[selectedBuilding];
         selectedBuilding = null;
       }
-      await loadGameState();
       renderInventoryPanel();
     }
     return;
