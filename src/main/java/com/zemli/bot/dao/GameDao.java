@@ -747,7 +747,10 @@ public class GameDao {
                     WHERE owner_id = ?
                     GROUP BY building_type
                     """,
-                    rs -> countsByType.put(normalizeMapBuildingType(rs.getString("building_type")), rs.getInt("cnt")),
+                    (rs, rowNum) -> {
+                        countsByType.put(normalizeMapBuildingType(rs.getString("building_type")), rs.getInt("cnt"));
+                        return null;
+                    },
                     playerId
             );
 
