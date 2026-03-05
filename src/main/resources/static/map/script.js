@@ -8,6 +8,8 @@ const CENTER_Y = Math.floor(MAP_HEIGHT / 2);
 const API_BASE = "";
 const tg = window.Telegram?.WebApp;
 const TELEGRAM_USER_ID = Number(tg?.initDataUnsafe?.user?.id || 0);
+const URL_PLAYER_ID = Number(new URLSearchParams(window.location.search).get("playerId") || 0);
+const ACTIVE_PLAYER_ID = URL_PLAYER_ID || TELEGRAM_USER_ID;
 const USER_KEY = TELEGRAM_USER_ID > 0 ? String(TELEGRAM_USER_ID) : "guest";
 
 let cameraX = CENTER_X * TILE_SIZE - window.innerWidth / 2;
@@ -29,6 +31,8 @@ let selectedUnitType = null;
 let armyOrderMode = "recruit"; // recruit | move
 
 let loadedBuildings = [];
+let inventory = {};
+let gameResources = null;
 let loadedUnits = [];
 let enemyMarkers = [];
 
@@ -38,6 +42,9 @@ const buildingEmojiMap = {
   mine: "⛏️",
   farm: "🌾",
   barracks: "⚔️",
+  iron_mine: "⚔️",
+  warehouse: "📦",
+  house: "🏠",
   wall: "🧱",
   tower: "🗼",
   gold: "💰",
@@ -277,51 +284,56 @@ function findCapitol() {
 }
 
 async function buildBuilding(x, y, type) {
-  if (!TELEGRAM_USER_ID) {
+  if (!ACTIVE_PLAYER_ID) {
     console.warn("No Telegram user id; build is disabled.");
-    return;
+    return false;
   }
   const res = await fetch(`${API_BASE}/api/build`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ x, y, type, userId: TELEGRAM_USER_ID, building: type })
+    body: JSON.stringify({ x, y, type, userId: ACTIVE_PLAYER_ID, building: type })
   });
-  if (res.ok) {
-    await loadBuildings();
-  } else {
-    console.warn("Build failed", res.status);
+  if (!res.ok) {
+    const msg = await res.text();
+    console.warn("Build failed", res.status, msg);
+    return false;
   }
+  return true;
 }
 
-async function loadBuildings() {
-  // First try the simple endpoint shape used on frontend.
-  try {
-    const plainRes = await fetch(`${API_BASE}/api/buildings`);
-    if (plainRes.ok) {
-      loadedBuildings = await plainRes.json();
-      window.buildings = loadedBuildings;
-      return;
-    }
-  } catch (e) {
-    console.warn("Simple /api/buildings failed, fallback to area query", e);
+function normalizeInventoryPayload(rawInventory) {
+  const result = {};
+  if (!rawInventory || typeof rawInventory !== "object") return result;
+  for (const [type, count] of Object.entries(rawInventory)) {
+    const n = Number(count || 0);
+    if (n > 0) result[normalizeType(type)] = n;
   }
+  return result;
+}
 
-  // Fallback for current backend that expects x1,y1,x2,y2.
-  const tile = TILE_SIZE * scale;
-  const startCol = Math.floor(cameraX / tile) - 3;
-  const startRow = Math.floor(cameraY / tile) - 3;
-  const endCol = startCol + Math.ceil(mapCanvas.width / tile) + 6;
-  const endRow = startRow + Math.ceil(mapCanvas.height / tile) + 6;
+async function loadGameState() {
+  if (!ACTIVE_PLAYER_ID) return;
 
-  const x1 = startCol - CENTER_X;
-  const y1 = startRow - CENTER_Y;
-  const x2 = endCol - CENTER_X;
-  const y2 = endRow - CENTER_Y;
-  const areaRes = await fetch(`${API_BASE}/api/buildings?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}`);
-  if (!areaRes.ok) return;
+  const endpoints = [
+    `${API_BASE}/api/game/state?playerId=${ACTIVE_PLAYER_ID}`,
+    `${API_BASE}/api/state?userId=${ACTIVE_PLAYER_ID}`
+  ];
 
-  loadedBuildings = await areaRes.json();
-  window.buildings = loadedBuildings;
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const state = await res.json();
+      loadedBuildings = Array.isArray(state.buildings) ? state.buildings : [];
+      inventory = normalizeInventoryPayload(state.inventory || state.buildInventory);
+      gameResources = state.resources || null;
+      window.buildings = loadedBuildings;
+      renderInventoryPanel();
+      return;
+    } catch (e) {
+      console.warn("State load failed", url, e);
+    }
+  }
 }
 
 function unitsStorageKey() {
@@ -354,12 +366,12 @@ async function moveUnit(unitId, x, y) {
   const unit = loadedUnits.find((u) => u.id === unitId);
   if (!unit) return;
 
-  if (TELEGRAM_USER_ID) {
+  if (ACTIVE_PLAYER_ID) {
     try {
       await fetch(`${API_BASE}/api/move`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: TELEGRAM_USER_ID, x, y, units: 1 })
+        body: JSON.stringify({ userId: ACTIVE_PLAYER_ID, x, y, units: 1 })
       });
     } catch (e) {
       console.warn("Move request failed", e);
@@ -381,6 +393,44 @@ function updateModeText() {
   if (!modeInfo) return;
   const modeText = actionMode || "наблюдение";
   modeInfo.textContent = `Режим: ${modeText}`;
+}
+
+function inventoryTypes() {
+  return Object.entries(inventory)
+    .filter(([, count]) => Number(count) > 0)
+    .map(([type]) => normalizeType(type));
+}
+
+function renderInventoryPanel() {
+  const wrap = document.getElementById("inventoryButtons");
+  const empty = document.getElementById("inventoryEmpty");
+  if (!wrap) return;
+
+  wrap.querySelectorAll(".build-btn").forEach((b) => b.remove());
+
+  const types = inventoryTypes();
+  if (!types.length) {
+    if (empty) empty.style.display = "block";
+    selectedBuilding = null;
+    return;
+  }
+
+  if (empty) empty.style.display = "none";
+  for (const type of types) {
+    const count = Number(inventory[type] || 0);
+    const btn = document.createElement("button");
+    btn.className = "emoji-btn build-btn";
+    btn.dataset.type = type;
+    btn.title = `${type} x${count}`;
+    btn.innerHTML = `${buildingEmojiMap[type] || "🏗️"}<span class="inventory-count">x${count}</span>`;
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".build-btn").forEach((b) => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      selectedBuilding = type;
+      setActionMode("build");
+    });
+    wrap.appendChild(btn);
+  }
 }
 
 function setActionMode(mode) {
@@ -405,14 +455,6 @@ function setArmyOrderMode(mode) {
 }
 
 function bindUi() {
-  document.querySelectorAll(".build-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".build-btn").forEach((b) => b.classList.remove("selected"));
-      btn.classList.add("selected");
-      selectedBuilding = btn.dataset.type;
-    });
-  });
-
   document.querySelectorAll(".unit-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".unit-btn").forEach((b) => b.classList.remove("selected"));
@@ -503,22 +545,35 @@ function pickNearestUnit(x, y) {
 }
 
 async function onMapClick(relX, relY) {
-  // Part 1: building works immediately after selecting a building button.
-  if (selectedBuilding) {
-    await buildBuilding(relX, relY, selectedBuilding);
+  if (actionMode === "build" || selectedBuilding) {
+    if (!selectedBuilding) {
+      const types = inventoryTypes();
+      if (!types.length) {
+        alert("Инвентарь построек пуст");
+        return;
+      }
+      selectedBuilding = types[0];
+    }
+    if (!inventory[selectedBuilding] || inventory[selectedBuilding] <= 0) {
+      alert("Этой постройки нет в инвентаре");
+      renderInventoryPanel();
+      return;
+    }
+
+    const placed = await buildBuilding(relX, relY, selectedBuilding);
+    if (placed) {
+      inventory[selectedBuilding] = Math.max(0, Number(inventory[selectedBuilding]) - 1);
+      if (inventory[selectedBuilding] === 0) {
+        delete inventory[selectedBuilding];
+        selectedBuilding = null;
+      }
+      await loadGameState();
+      renderInventoryPanel();
+    }
     return;
   }
 
   if (!actionMode) return;
-
-  if (actionMode === "build") {
-    if (!selectedBuilding) {
-      console.log(`🏗️ Построить на (${relX}, ${relY})`);
-      return;
-    }
-    await buildBuilding(relX, relY, selectedBuilding);
-    return;
-  }
 
   if (actionMode === "move") {
     console.log(`🚚 Переместить в (${relX}, ${relY})`);
@@ -786,8 +841,9 @@ async function bootstrap() {
     await onMapClick(rel.x, rel.y);
   });
 
-  await loadBuildings();
-  setInterval(loadBuildings, 5000);
+  await loadGameState();
+  setInterval(loadGameState, 5000);
+  renderInventoryPanel();
   render();
 }
 

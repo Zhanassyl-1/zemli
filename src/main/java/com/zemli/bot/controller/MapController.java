@@ -118,6 +118,38 @@ public class MapController {
         );
     }
 
+    @GetMapping("/game/state")
+    public GameStateResponse getGameState(@RequestParam long playerId) {
+        PlayerRecord player = registrationService.findRegistered(playerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found for playerId=" + playerId));
+
+        ResourcesRecord resources = gameDao.loadResources(player.id());
+        List<MapBuildingDto> buildings = gameDao.loadMapBuildingsByOwner(player.id()).stream()
+                .map(row -> new MapBuildingDto(row.x(), row.y(), row.type(), row.ownerId(), row.builtAt()))
+                .toList();
+        Map<String, Integer> inventory = gameDao.loadInventory(player.id()).stream()
+                .filter(item -> item.type().startsWith("MAP_BUILD_") && item.quantity() > 0)
+                .collect(java.util.stream.Collectors.toMap(
+                        item -> item.type().substring("MAP_BUILD_".length()).toLowerCase(),
+                        item -> item.quantity()
+                ));
+
+        return new GameStateResponse(
+                buildings,
+                inventory,
+                new ResourcesDto(
+                        resources.wood(),
+                        resources.stone(),
+                        resources.iron(),
+                        resources.gold(),
+                        resources.food(),
+                        resources.population(),
+                        resources.maxPopulation(),
+                        resources.storageLimit()
+                )
+        );
+    }
+
     @GetMapping("/buildings")
     public List<MapBuildingDto> getBuildings(
             @RequestParam int x1,
@@ -204,6 +236,13 @@ public class MapController {
             ResourcesDto resources,
             List<MapBuildingDto> buildings,
             Map<String, Integer> buildInventory
+    ) {
+    }
+
+    public record GameStateResponse(
+            List<MapBuildingDto> buildings,
+            Map<String, Integer> inventory,
+            ResourcesDto resources
     ) {
     }
 }

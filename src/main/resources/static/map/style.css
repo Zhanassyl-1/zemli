@@ -80,6 +80,7 @@ body {
 
 .build-panel {
   left: 10px;
+  width: 170px;
 }
 
 .army-panel {
@@ -97,6 +98,25 @@ body {
 .panel-title {
   font-size: 12px;
   color: #ffd700;
+}
+
+.inventory-subtitle {
+  font-size: 10px;
+  line-height: 1.2;
+  color: #c9c9c9;
+  margin-bottom: 6px;
+}
+
+.inventory-empty {
+  text-align: center;
+  color: #b7b7b7;
+  font-size: 12px;
+  padding: 8px 4px;
+}
+
+.inventory-count {
+  font-size: 12px;
+  color: #ffd36f;
 }
 
 .panel-toggle {
@@ -129,6 +149,13 @@ body {
   justify-content: center;
   cursor: pointer;
   transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.build-btn {
+  width: 100%;
+  justify-content: space-between;
+  padding: 0 8px;
+  font-size: 24px;
 }
 
 .emoji-btn:hover {
