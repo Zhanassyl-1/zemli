@@ -364,9 +364,11 @@ function drawBuildings(ctx, startCol, startRow, endCol, endRow) {
   const buildings = (Array.isArray(window.buildings) && window.buildings.length)
     ? window.buildings
     : loadedBuildings;
+  console.log("🎨 Рисую здания, количество:", buildings.length);
   if (!buildings.length) return;
 
   for (const b of buildings) {
+    console.log("Здание:", b.x, b.y, b.type);
     const worldCol = b.x + CENTER_X;
     const worldRow = b.y + CENTER_Y;
     if (worldCol < 0 || worldCol >= MAP_WIDTH || worldRow < 0 || worldRow >= MAP_HEIGHT) continue;
@@ -377,21 +379,20 @@ function drawBuildings(ctx, startCol, startRow, endCol, endRow) {
     if (screenX <= -50 || screenX >= canvas.width + 50 || screenY <= -50 || screenY >= canvas.height + 50) continue;
 
     const type = normalizeBuildingType(b.type);
-    let emoji = '🏠';
-    switch (type) {
-      case 'capitol': emoji = '🏰'; break;
-      case 'lumber': emoji = '🪓'; break;
-      case 'mine': emoji = '⛏️'; break;
-      case 'farm': emoji = '🌾'; break;
-      case 'barracks': emoji = '⚔️'; break;
-      case 'wall': emoji = '🧱'; break;
-      case 'tower': emoji = '🗼'; break;
-      case 'gold': emoji = '💰'; break;
-      case 'stable': emoji = '🐎'; break;
-      case 'library': emoji = '📚'; break;
-      case 'tavern': emoji = '🍺'; break;
-      default: emoji = BUILDING_ICONS[type] || '🏠';
-    }
+    const emojiMap = {
+      capitol: '🏰',
+      lumber: '🪓',
+      mine: '⛏️',
+      farm: '🌾',
+      barracks: '⚔️',
+      wall: '🧱',
+      tower: '🗼',
+      gold: '💰',
+      stable: '🐎',
+      library: '📚',
+      tavern: '🍺'
+    };
+    const emoji = emojiMap[type] || BUILDING_ICONS[type] || '🏠';
 
     ctx.font = `${TILE_SIZE * scale * 1.5}px 'Courier New'`;
     ctx.fillStyle = '#FFFFFF';
@@ -444,6 +445,7 @@ window.onload = function () {
       if (!response.ok) return;
       loadedBuildings = await response.json();
       window.buildings = loadedBuildings;
+      console.log("Загружено зданий:", loadedBuildings.length);
       if (homeX === 0 && homeY === 0) {
         const capitol = loadedBuildings.find(b => normalizeBuildingType(b.type) === 'capitol');
         if (capitol) setHome(capitol.x, capitol.y);
@@ -640,6 +642,7 @@ window.onload = function () {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const visible = drawMap(ctx, canvas);
     drawSpecialBuilding(ctx, canvas);
+    // Здания рисуются после биомов карты.
     if (visible) {
       drawBuildings(ctx, visible.startCol, visible.startRow, visible.endCol, visible.endRow);
     }
