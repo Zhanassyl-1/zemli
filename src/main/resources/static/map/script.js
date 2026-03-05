@@ -1,3 +1,50 @@
+// Bootstrap state loader from Telegram WebApp.
+(function() {
+  console.log("🚀 Карта запускается...");
+
+  // Получаем Telegram WebApp
+  const tg = window.Telegram?.WebApp;
+  if (!tg) {
+    console.error("❌ Telegram WebApp не найден");
+    return;
+  }
+
+  // Получаем ID пользователя
+  const playerId = tg.initDataUnsafe?.user?.id;
+  console.log("🎮 ID игрока:", playerId);
+
+  if (!playerId) {
+    alert("Ошибка: не удалось получить ID пользователя");
+    return;
+  }
+
+  window.__tg = tg;
+  window.__playerId = playerId;
+
+  // Загружаем состояние игрока
+  async function loadGameState() {
+    try {
+      const response = await fetch(`/api/game/state?playerId=${playerId}`);
+      const data = await response.json();
+      console.log("📦 Загружено состояние:", data);
+
+      // Сохраняем в глобальные переменные
+      window.playerData = data;
+
+      // Если есть buildings — рисуем
+      if (data.buildings) {
+        drawBuildings(data.buildings);
+      }
+    } catch (error) {
+      console.error("❌ Ошибка загрузки:", error);
+    }
+  }
+
+  // Ждём готовности и загружаем
+  tg.ready();
+  loadGameState();
+})();
+
 // Rich tactical map UI for Telegram WebApp.
 const TILE_SIZE = 32;
 const MAP_WIDTH = 2000;
@@ -6,12 +53,8 @@ const CENTER_X = Math.floor(MAP_WIDTH / 2);
 const CENTER_Y = Math.floor(MAP_HEIGHT / 2);
 
 const API_BASE = "";
-const tg = window.Telegram?.WebApp;
-const playerId = tg?.initDataUnsafe?.user?.id || 0;
-console.log("🎮 Player ID:", playerId);
-if (!playerId) {
-  alert("Ошибка: не удалось получить ID пользователя");
-}
+const tg = window.__tg || window.Telegram?.WebApp;
+const playerId = window.__playerId || tg?.initDataUnsafe?.user?.id || 0;
 const TELEGRAM_USER_ID = Number(playerId || 0);
 const URL_PLAYER_ID = Number(new URLSearchParams(window.location.search).get("playerId") || 0);
 const ACTIVE_PLAYER_ID = URL_PLAYER_ID || TELEGRAM_USER_ID;
@@ -751,6 +794,11 @@ function drawResourceMarkers(ctx, view) {
 }
 
 function drawBuildings(ctx, view) {
+  if (Array.isArray(ctx)) {
+    loadedBuildings = ctx;
+    window.buildings = loadedBuildings;
+    return;
+  }
   const { tile } = view;
   const buildings = window.buildings || loadedBuildings || [];
   if (!buildings.length) return;
