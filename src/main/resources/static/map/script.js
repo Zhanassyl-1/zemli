@@ -294,6 +294,19 @@ async function buildBuilding(x, y, type) {
 }
 
 async function loadBuildings() {
+  // First try the simple endpoint shape used on frontend.
+  try {
+    const plainRes = await fetch(`${API_BASE}/api/buildings`);
+    if (plainRes.ok) {
+      loadedBuildings = await plainRes.json();
+      window.buildings = loadedBuildings;
+      return;
+    }
+  } catch (e) {
+    console.warn("Simple /api/buildings failed, fallback to area query", e);
+  }
+
+  // Fallback for current backend that expects x1,y1,x2,y2.
   const tile = TILE_SIZE * scale;
   const startCol = Math.floor(cameraX / tile) - 3;
   const startRow = Math.floor(cameraY / tile) - 3;
@@ -304,12 +317,10 @@ async function loadBuildings() {
   const y1 = startRow - CENTER_Y;
   const x2 = endCol - CENTER_X;
   const y2 = endRow - CENTER_Y;
+  const areaRes = await fetch(`${API_BASE}/api/buildings?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}`);
+  if (!areaRes.ok) return;
 
-  const res = await fetch(`${API_BASE}/api/buildings?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}`);
-  if (!res.ok) {
-    return;
-  }
-  loadedBuildings = await res.json();
+  loadedBuildings = await areaRes.json();
   window.buildings = loadedBuildings;
 }
 
@@ -399,7 +410,6 @@ function bindUi() {
       document.querySelectorAll(".build-btn").forEach((b) => b.classList.remove("selected"));
       btn.classList.add("selected");
       selectedBuilding = btn.dataset.type;
-      setActionMode("build");
     });
   });
 
@@ -493,6 +503,12 @@ function pickNearestUnit(x, y) {
 }
 
 async function onMapClick(relX, relY) {
+  // Part 1: building works immediately after selecting a building button.
+  if (selectedBuilding) {
+    await buildBuilding(relX, relY, selectedBuilding);
+    return;
+  }
+
   if (!actionMode) return;
 
   if (actionMode === "build") {
@@ -663,9 +679,10 @@ function drawResourceMarkers(ctx, view) {
 
 function drawBuildings(ctx, view) {
   const { tile } = view;
-  if (!loadedBuildings.length) return;
+  const buildings = window.buildings || loadedBuildings || [];
+  if (!buildings.length) return;
 
-  for (const b of loadedBuildings) {
+  for (const b of buildings) {
     const pos = worldToScreen(b.x, b.y);
     if (pos.x + tile < -60 || pos.y + tile < -60 || pos.x > mapCanvas.width + 60 || pos.y > mapCanvas.height + 60) continue;
 
