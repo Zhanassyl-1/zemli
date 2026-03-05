@@ -1505,6 +1505,20 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                         btn("▶️", "faction:view:" + Math.floorMod(safeIndex + 1, FACTION_ORDER.size()))
                 ))
                 .build();
+        SendPhoto previewPhoto = imageService.getFactionPreviewImage(
+                raceImageKey(faction),
+                String.valueOf(chatId),
+                text
+        );
+        if (previewPhoto != null) {
+            previewPhoto.setReplyMarkup(keyboard);
+            try {
+                execute(previewPhoto);
+                return;
+            } catch (Exception e) {
+                log.warn("Failed to send faction preview image: {}", e.getMessage());
+            }
+        }
         sendTextRaw(chatId, text, keyboard);
     }
 

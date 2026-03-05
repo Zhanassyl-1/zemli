@@ -18,10 +18,12 @@ public class ImageService {
 
     private final Map<String, String> victoryImages = new HashMap<>();
     private final Map<String, String> defeatImages = new HashMap<>();
+    private final Map<String, String> factionPreviewImages = new HashMap<>();
 
     public ImageService() {
         initVictoryImages();
         initDefeatImages();
+        initFactionPreviewImages();
     }
 
     private void initVictoryImages() {
@@ -76,6 +78,15 @@ public class ImageService {
         defeatImages.put("universal", "/images/heroes/lucid-origin_pixel_art_16-bit_victorious_warrior_holding_severed_enemy_head_dead_bodies_aroun-0.jpg");
     }
 
+    private void initFactionPreviewImages() {
+        factionPreviewImages.put("knight", "/images/heroes/lucid-origin_pixel_art_medieval_knight_full_plate_armor_sword_and_shield_silver_blue_colors_1-0.jpg");
+        factionPreviewImages.put("samurai", "/images/heroes/lucid-origin_pixel_art_samurai_warrior_japanese_armor_katana_red_black_colors_128x128_sprite_-0.jpg");
+        factionPreviewImages.put("viking", "/images/heroes/lucid-origin_pixel_art_viking_warrior_fur_armor_axe_round_shield_blue_grey_colors_128x128_spr-0.jpg");
+        factionPreviewImages.put("mongol", "/images/heroes/lucid-origin_pixel_art_mongol_warrior_leather_armor_bow_on_horseback_brown_gold_colors_128x12-0.jpg");
+        factionPreviewImages.put("arabian", "/images/heroes/lucid-origin_pixel_art_desert_nomad_warrior_robes_turban_scimitar_sand_orange_colors_128x128_-0.jpg");
+        factionPreviewImages.put("aztec", "/images/heroes/lucid-origin_pixel_art_aztec_warrior_feathered_headdress_obsidian_club_green_gold_colors_128x-0.jpg");
+    }
+
     public SendPhoto getVictoryImage(String winner, String loser, String chatId) {
         String key = normalizeRace(winner) + "_vs_" + normalizeRace(loser) + "_win";
         String imagePath = victoryImages.getOrDefault(key, victoryImages.get("universal"));
@@ -101,6 +112,14 @@ public class ImageService {
 
     public SendPhoto getArtifactImage(String chatId, String artifactName) {
         return buildSendPhoto(chatId, victoryImages.get("universal"), "💎 Найден артефакт: " + artifactName);
+    }
+
+    public SendPhoto getFactionPreviewImage(String race, String chatId, String caption) {
+        String imagePath = factionPreviewImages.get(normalizeRace(race));
+        if (imagePath == null) {
+            return null;
+        }
+        return buildSendPhoto(chatId, imagePath, caption);
     }
 
     private SendPhoto buildSendPhoto(String chatId, String imagePath, String caption) {
