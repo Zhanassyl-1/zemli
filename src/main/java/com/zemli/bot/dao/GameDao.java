@@ -18,9 +18,12 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.sql.DataSource;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -45,6 +48,7 @@ public class GameDao {
     public record Point(int x, int y) {}
     public record CapitalPoint(long playerId, int x, int y) {}
     public record MapBuilding(long ownerId, int x, int y, String type, long builtAt) {}
+    public record KingdomState(long playerId, String race, int homeX, int homeY, int level, Instant createdAt) {}
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -54,6 +58,8 @@ public class GameDao {
             migrateAllianceSchemaIfNeeded();
             migrateArmyPowerSchemaIfNeeded();
             migrateMapBuildingsSchemaIfNeeded();
+            migrateResourcesSchemaIfNeeded();
+            migrateKingdomSchemaIfNeeded();
         } catch (Exception e) {
             log.error("Ошибка в GameDao при инициализации: {}", e.getMessage(), e);
             throw new IllegalStateException("GameDao initialization failed", e);
@@ -124,6 +130,26 @@ public class GameDao {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_map_buildings_area ON map_buildings(x, y)");
     }
 
+    private void migrateResourcesSchemaIfNeeded() {
+        jdbcTemplate.execute("ALTER TABLE resources ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP NOT NULL DEFAULT NOW()");
+        jdbcTemplate.update("UPDATE resources SET last_updated = NOW() WHERE last_updated IS NULL");
+    }
+
+    private void migrateKingdomSchemaIfNeeded() {
+        jdbcTemplate.execute(
+                """
+                CREATE TABLE IF NOT EXISTS kingdom (
+                    player_id BIGINT PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+                    race VARCHAR(50) NOT NULL,
+                    home_x INTEGER NOT NULL DEFAULT 0,
+                    home_y INTEGER NOT NULL DEFAULT 0,
+                    level INTEGER NOT NULL DEFAULT 1,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+                """
+        );
+    }
+
     public Optional<PlayerRecord> findPlayerByTelegramId(long telegramId) {
         List<PlayerRecord> players = jdbcTemplate.query(
                 """
@@ -185,6 +211,8 @@ public class GameDao {
                 """,
                 created.id()
         );
+
+        upsertKingdom(created.id(), faction.name().toLowerCase(), 0, 0, 1);
 
         appendDailyLog("REGISTRATION", "🏡 " + villageName + " выбрал фракцию " + faction.getTitle());
         return created;
@@ -589,6 +617,7 @@ public class GameDao {
     public void saveCapital(long playerId, int x, int y) {
         setPlayerState(playerId, "CAPITAL_X", x);
         setPlayerState(playerId, "CAPITAL_Y", y);
+        updateKingdomHome(playerId, x, y);
     }
 
     public void saveMapBuilding(long ownerId, int x, int y, String type) {
@@ -623,6 +652,158 @@ public class GameDao {
                 ),
                 minX, maxX, minY, maxY
         );
+    }
+
+    public List<MapBuilding> loadMapBuildingsByOwner(long ownerId) {
+        return jdbcTemplate.query(
+                """
+                SELECT owner_id, x, y, building_type, built_at
+                FROM map_buildings
+                WHERE owner_id = ?
+                ORDER BY built_at DESC
+                LIMIT 2000
+                """,
+                (rs, rowNum) -> new MapBuilding(
+                        rs.getLong("owner_id"),
+                        rs.getInt("x"),
+                        rs.getInt("y"),
+                        rs.getString("building_type"),
+                        rs.getLong("built_at")
+                ),
+                ownerId
+        );
+    }
+
+    public Optional<KingdomState> loadKingdom(long playerId) {
+        List<KingdomState> rows = jdbcTemplate.query(
+                """
+                SELECT player_id, race, home_x, home_y, level, created_at
+                FROM kingdom
+                WHERE player_id = ?
+                """,
+                (rs, rowNum) -> new KingdomState(
+                        rs.getLong("player_id"),
+                        rs.getString("race"),
+                        rs.getInt("home_x"),
+                        rs.getInt("home_y"),
+                        rs.getInt("level"),
+                        rs.getTimestamp("created_at").toInstant()
+                ),
+                playerId
+        );
+        return rows.stream().findFirst();
+    }
+
+    public void upsertKingdom(long playerId, String race, int homeX, int homeY, int level) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO kingdom(player_id, race, home_x, home_y, level)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (player_id)
+                DO UPDATE SET race = EXCLUDED.race, home_x = EXCLUDED.home_x, home_y = EXCLUDED.home_y, level = EXCLUDED.level
+                """,
+                playerId, race, homeX, homeY, level
+        );
+    }
+
+    public void updateKingdomHome(long playerId, int homeX, int homeY) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO kingdom(player_id, race, home_x, home_y, level)
+                VALUES (?, COALESCE((SELECT LOWER(faction) FROM players WHERE id = ?), 'knights'), ?, ?, 1)
+                ON CONFLICT (player_id)
+                DO UPDATE SET home_x = EXCLUDED.home_x, home_y = EXCLUDED.home_y
+                """,
+                playerId, playerId, homeX, homeY
+        );
+    }
+
+    public int applyMapBuildingIncomeTick() {
+        Instant now = Instant.now();
+        int affected = 0;
+        for (PlayerRecord player : allPlayers()) {
+            long playerId = player.id();
+
+            Timestamp lastUpdatedTs = jdbcTemplate.queryForObject(
+                    "SELECT last_updated FROM resources WHERE player_id = ?",
+                    Timestamp.class,
+                    playerId
+            );
+            if (lastUpdatedTs == null) {
+                continue;
+            }
+
+            Instant lastUpdated = lastUpdatedTs.toInstant();
+            long elapsedSeconds = Math.max(0, Duration.between(lastUpdated, now).getSeconds());
+            if (elapsedSeconds <= 0) {
+                continue;
+            }
+
+            Map<String, Integer> countsByType = new HashMap<>();
+            jdbcTemplate.query(
+                    """
+                    SELECT building_type, COUNT(*) AS cnt
+                    FROM map_buildings
+                    WHERE owner_id = ?
+                    GROUP BY building_type
+                    """,
+                    rs -> countsByType.put(normalizeMapBuildingType(rs.getString("building_type")), rs.getInt("cnt")),
+                    playerId
+            );
+
+            int lumberCount = countsByType.getOrDefault("lumber", 0);
+            int mineCount = countsByType.getOrDefault("mine", 0);
+            int ironMineCount = countsByType.getOrDefault("iron_mine", 0);
+            int goldMineCount = countsByType.getOrDefault("gold_mine", 0);
+            int farmCount = countsByType.getOrDefault("farm", 0);
+
+            int woodGain = calcHourlyGain(elapsedSeconds, lumberCount, 5);
+            int stoneGain = calcHourlyGain(elapsedSeconds, mineCount, 3);
+            int ironGain = calcHourlyGain(elapsedSeconds, ironMineCount, 2);
+            int goldGain = calcHourlyGain(elapsedSeconds, goldMineCount, 1);
+            int foodGain = calcHourlyGain(elapsedSeconds, farmCount, 10);
+
+            jdbcTemplate.update(
+                    """
+                    UPDATE resources
+                    SET wood = wood + ?,
+                        stone = stone + ?,
+                        iron = iron + ?,
+                        gold = gold + ?,
+                        food = food + ?,
+                        last_updated = NOW()
+                    WHERE player_id = ?
+                    """,
+                    woodGain, stoneGain, ironGain, goldGain, foodGain, playerId
+            );
+
+            if (woodGain > 0 || stoneGain > 0 || ironGain > 0 || goldGain > 0 || foodGain > 0) {
+                affected++;
+            }
+        }
+        return affected;
+    }
+
+    private int calcHourlyGain(long elapsedSeconds, int buildingCount, int perHourPerBuilding) {
+        if (buildingCount <= 0 || perHourPerBuilding <= 0 || elapsedSeconds <= 0) {
+            return 0;
+        }
+        double amount = (elapsedSeconds / 3600.0) * perHourPerBuilding * buildingCount;
+        return (int) Math.floor(amount);
+    }
+
+    private String normalizeMapBuildingType(String buildingType) {
+        if (buildingType == null) {
+            return "";
+        }
+        String value = buildingType.trim().toLowerCase();
+        if (value.equals("gold")) {
+            return "gold_mine";
+        }
+        if (value.equals("iron") || value.equals("ironmine")) {
+            return "iron_mine";
+        }
+        return value;
     }
 
     public List<Point> loadAllCapitals() {

@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS resources (
     iron INTEGER NOT NULL DEFAULT 0 CHECK (iron >= 0),
     gold INTEGER NOT NULL DEFAULT 0 CHECK (gold >= 0),
     mana INTEGER NOT NULL DEFAULT 0 CHECK (mana >= 0),
-    alcohol INTEGER NOT NULL DEFAULT 0 CHECK (alcohol >= 0)
+    alcohol INTEGER NOT NULL DEFAULT 0 CHECK (alcohol >= 0),
+    last_updated TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS buildings (
@@ -154,6 +155,15 @@ CREATE TABLE IF NOT EXISTS map_buildings (
     building_type TEXT NOT NULL,
     built_at BIGINT NOT NULL,
     UNIQUE(owner_id, x, y)
+);
+
+CREATE TABLE IF NOT EXISTS kingdom (
+    player_id BIGINT PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+    race VARCHAR(50) NOT NULL,
+    home_x INTEGER NOT NULL DEFAULT 0,
+    home_y INTEGER NOT NULL DEFAULT 0,
+    level INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_players_telegram_id ON players(telegram_id);

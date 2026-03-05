@@ -40,6 +40,9 @@ public class GameScheduler {
         }
         int affected = gameDao.applyPassiveIncomeTick(mul);
         log.info("Passive resource tick completed, players affected={}", affected);
+
+        int mapIncomeAffected = gameDao.applyMapBuildingIncomeTick();
+        log.info("Map building income tick completed, players affected={}", mapIncomeAffected);
     }
 
     @Scheduled(cron = "0 0 * * * *", zone = "${game.time-zone:UTC}")

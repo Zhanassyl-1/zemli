@@ -2,6 +2,7 @@ package com.zemli.bot.controller;
 
 import com.zemli.bot.dao.GameDao;
 import com.zemli.bot.model.PlayerRecord;
+import com.zemli.bot.model.ResourcesRecord;
 import com.zemli.bot.service.RegistrationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -61,6 +62,29 @@ public class MapController {
         return new ActionResult(true, "Команда на строительство отправлена");
     }
 
+    @GetMapping("/state")
+    public MapStateResponse getState(@RequestParam long userId) {
+        PlayerRecord player = registrationService.findRegistered(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found for userId=" + userId));
+
+        GameDao.KingdomState kingdom = gameDao.loadKingdom(player.id())
+                .orElseGet(() -> {
+                    gameDao.upsertKingdom(player.id(), player.faction().name().toLowerCase(), 0, 0, player.cityLevel());
+                    return gameDao.loadKingdom(player.id()).orElseThrow();
+                });
+
+        ResourcesRecord resources = gameDao.loadResources(player.id());
+        List<MapBuildingDto> buildings = gameDao.loadMapBuildingsByOwner(player.id()).stream()
+                .map(row -> new MapBuildingDto(row.x(), row.y(), row.type(), row.ownerId(), row.builtAt()))
+                .toList();
+
+        return new MapStateResponse(
+                new KingdomDto(kingdom.race(), kingdom.homeX(), kingdom.homeY(), kingdom.level(), kingdom.createdAt().toEpochMilli()),
+                new ResourcesDto(resources.wood(), resources.stone(), resources.iron(), resources.gold(), resources.food()),
+                buildings
+        );
+    }
+
     @GetMapping("/buildings")
     public List<MapBuildingDto> getBuildings(
             @RequestParam int x1,
@@ -85,6 +109,7 @@ public class MapController {
         gameDao.setPlayerState(player.id(), "LAST_WEB_MOVE_Y", request.y());
         gameDao.setPlayerState(player.id(), "LAST_WEB_MOVE_UNITS", request.units());
         gameDao.setPlayerState(player.id(), "LAST_WEB_MOVE_AT", System.currentTimeMillis());
+        gameDao.updateKingdomHome(player.id(), request.x(), request.y());
         return new ActionResult(true, "Передвижение зафиксировано");
     }
 
@@ -124,5 +149,14 @@ public class MapController {
     }
 
     public record MapBuildingDto(int x, int y, String type, long ownerId, long builtAt) {
+    }
+
+    public record KingdomDto(String race, int homeX, int homeY, int level, long createdAt) {
+    }
+
+    public record ResourcesDto(int wood, int stone, int iron, int gold, int food) {
+    }
+
+    public record MapStateResponse(KingdomDto kingdom, ResourcesDto resources, List<MapBuildingDto> buildings) {
     }
 }

@@ -72,6 +72,18 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             "NETHERITE_ARMOR", 0.50
     );
     private static final List<String> RESOURCES = List.of("WOOD", "STONE", "FOOD", "IRON", "GOLD", "MANA", "ALCOHOL");
+    private static final List<ShopOffer> SHOP_BUY_OFFERS = List.of(
+            new ShopOffer("wood", "🪵 Дерево", "WOOD", 100, 10),
+            new ShopOffer("stone", "🪨 Камень", "STONE", 100, 15),
+            new ShopOffer("iron", "⚔️ Железо", "IRON", 50, 30),
+            new ShopOffer("food", "🌾 Еда", "FOOD", 200, 5)
+    );
+    private static final List<ShopOffer> SHOP_SELL_OFFERS = List.of(
+            new ShopOffer("wood", "🪵 Дерево", "WOOD", 100, 5),
+            new ShopOffer("stone", "🪨 Камень", "STONE", 100, 8),
+            new ShopOffer("iron", "⚔️ Железо", "IRON", 50, 20),
+            new ShopOffer("food", "🌾 Еда", "FOOD", 200, 2)
+    );
     // ВОТ СЮДА ВСТАВЬ СВОЙ ЮЗЕРНЕЙМ:
     public static final List<String> ADMIN_USERNAMES = new ArrayList<>(Arrays.asList(
             "твой_юзернейм",
@@ -225,6 +237,9 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             int lossMin,
             int lossMax
     ) {
+    }
+
+    private record ShopOffer(String code, String title, String resourceKey, int resourceAmount, int goldAmount) {
     }
 
     @Override
@@ -576,7 +591,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
         if ("/help".equalsIgnoreCase(commandToken) && isPrivate) {
-            sendText(chatId, "📋 Помощь\n/start — 🚀 Начать игру\n/map — 🗺️ Карта вокруг столицы\n/legend — 📘 Легенда карты\n/help — 📋 Помощь");
+            sendText(chatId, "📋 Помощь\n/start — 🚀 Начать игру\n/map — 🗺️ Карта вокруг столицы\n/shop — 🛒 Магазин ресурсов\n/sell — 💱 Продажа ресурсов\n/legend — 📘 Легенда карты\n/help — 📋 Помощь");
             return;
         }
         if ("/map".equalsIgnoreCase(commandToken) && isPrivate) {
@@ -613,6 +628,24 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 return;
             }
             sendCityInfo(chatId);
+            return;
+        }
+        if ("/shop".equalsIgnoreCase(commandToken) && isPrivate) {
+            Optional<PlayerRecord> p = registrationService.findRegistered(tgId);
+            if (p.isEmpty()) {
+                sendText(chatId, "Сначала зарегистрируйся через /start");
+                return;
+            }
+            showShopMenu(chatId, p.get());
+            return;
+        }
+        if ("/sell".equalsIgnoreCase(commandToken) && isPrivate) {
+            Optional<PlayerRecord> p = registrationService.findRegistered(tgId);
+            if (p.isEmpty()) {
+                sendText(chatId, "Сначала зарегистрируйся через /start");
+                return;
+            }
+            showSellMenu(chatId, p.get());
             return;
         }
         if ("/legend".equalsIgnoreCase(commandToken) && isPrivate) {
@@ -1441,6 +1474,10 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
         }
         if (data.startsWith("alliance:")) {
             handleAllianceCallbacks(chatId, player, data);
+            return;
+        }
+        if (data.startsWith("shop:")) {
+            handleShopCallbacks(chatId, player, data);
             return;
         }
 
@@ -4425,11 +4462,95 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
     }
 
     private void sendResources(Long chatId) {
-        sendText(chatId, "📊 Ресурсы\n🪵 Дерево: 100\n⛏️ Железо: 50\n💰 Золото: 200\n🌾 Еда: 150");
+        sendText(chatId, "📊 Ресурсы\nИспользуй /shop и /sell для торговли.");
     }
 
     private void sendCityInfo(Long chatId) {
         sendText(chatId, "🏰 Город\nУровень: 1\nНаселение: 10\nПостроек: 0");
+    }
+
+    private void showShopMenu(long chatId, PlayerRecord player) {
+        ResourcesRecord r = gameDao.loadResources(player.id());
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        for (ShopOffer offer : SHOP_BUY_OFFERS) {
+            rows.add(List.of(btn(offer.title() + ": " + offer.goldAmount() + "💰 за " + offer.resourceAmount(),
+                    "shop:buy:" + offer.code())));
+        }
+        rows.add(List.of(btn("◀️ Закрыть", "shop:close")));
+        sendText(chatId,
+                "🛒 Магазин покупки\n" +
+                        "Твоё золото: 💰" + r.gold() + "\n" +
+                        "Выбери ресурс:",
+                InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private void showSellMenu(long chatId, PlayerRecord player) {
+        ResourcesRecord r = gameDao.loadResources(player.id());
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        for (ShopOffer offer : SHOP_SELL_OFFERS) {
+            rows.add(List.of(btn(offer.title() + ": +" + offer.goldAmount() + "💰 за " + offer.resourceAmount(),
+                    "shop:sell:" + offer.code())));
+        }
+        rows.add(List.of(btn("◀️ Закрыть", "shop:close")));
+        sendText(chatId,
+                "💱 Продажа ресурсов\n" +
+                        "Твои запасы: 🪵" + r.wood() + " 🪨" + r.stone() + " ⚔️" + r.iron() + " 🌾" + r.food() + "\n" +
+                        "Выбери, что продать:",
+                InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private void handleShopCallbacks(long chatId, PlayerRecord player, String data) {
+        if ("shop:close".equals(data)) {
+            sendMainMenu(chatId);
+            return;
+        }
+
+        if (data.startsWith("shop:buy:")) {
+            String code = data.substring("shop:buy:".length());
+            ShopOffer offer = findOffer(SHOP_BUY_OFFERS, code);
+            if (offer == null) {
+                sendText(chatId, "Неизвестный товар.");
+                return;
+            }
+            boolean paid = gameDao.spendSingleResource(player.id(), "GOLD", offer.goldAmount());
+            if (!paid) {
+                sendText(chatId, "❌ Не хватает золота для покупки.");
+                return;
+            }
+            gameDao.addSingleResource(player.id(), offer.resourceKey(), offer.resourceAmount());
+            sendText(chatId, "✅ Куплено: " + offer.title() + " +" + offer.resourceAmount() + " за " + offer.goldAmount() + "💰");
+            showShopMenu(chatId, player);
+            return;
+        }
+
+        if (data.startsWith("shop:sell:")) {
+            String code = data.substring("shop:sell:".length());
+            ShopOffer offer = findOffer(SHOP_SELL_OFFERS, code);
+            if (offer == null) {
+                sendText(chatId, "Неизвестный ресурс для продажи.");
+                return;
+            }
+            boolean removed = gameDao.spendSingleResource(player.id(), offer.resourceKey(), offer.resourceAmount());
+            if (!removed) {
+                sendText(chatId, "❌ Недостаточно ресурса для продажи.");
+                return;
+            }
+            gameDao.addSingleResource(player.id(), "GOLD", offer.goldAmount());
+            sendText(chatId, "✅ Продано: " + offer.title() + " -" + offer.resourceAmount() + ", получено +" + offer.goldAmount() + "💰");
+            showSellMenu(chatId, player);
+            return;
+        }
+
+        sendText(chatId, "Неизвестное действие магазина.");
+    }
+
+    private ShopOffer findOffer(List<ShopOffer> offers, String code) {
+        for (ShopOffer offer : offers) {
+            if (offer.code().equalsIgnoreCase(code)) {
+                return offer;
+            }
+        }
+        return null;
     }
 
     private void sendMapButton(Long chatId) {
