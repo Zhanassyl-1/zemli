@@ -395,9 +395,24 @@ function drawBuildings(ctx, startCol, startRow, endCol, endRow) {
     };
     const emoji = emojiMap[type] || BUILDING_ICONS[type] || '🏠';
 
-    ctx.font = `${TILE_SIZE * scale * 1.5}px 'Courier New'`;
+    const stickerX = screenX + tile / 2;
+    const stickerY = screenY + tile / 2;
+    const stickerSize = Math.max(20, tile * 0.92);
+
+    // Sticker-style badge under emoji
+    ctx.beginPath();
+    ctx.arc(stickerX, stickerY, Math.max(8, tile * 0.45), 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.24)';
+    ctx.lineWidth = Math.max(1, tile * 0.06);
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${stickerSize}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Courier New",sans-serif`;
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(emoji, screenX, screenY + TILE_SIZE * scale);
+    ctx.fillText(emoji, stickerX, stickerY + tile * 0.02);
   }
 }
 
