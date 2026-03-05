@@ -65,6 +65,45 @@ h1 { position: absolute; top: 10px; left: 10px; z-index: 100; color: white; }
     box-shadow: 0 0 10px #4a6a8a;
 }
 
+.action-panel {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    background: rgba(20, 20, 20, 0.9);
+    padding: 10px 20px;
+    border-radius: 30px;
+    border: 2px solid #444;
+    z-index: 1000;
+    backdrop-filter: blur(5px);
+}
+
+.action-btn {
+    background: #2a2a2a;
+    border: 1px solid #555;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    background: #3a3a3a;
+    border-color: #888;
+}
+
+.action-btn.active {
+    background: #4a6a8a;
+    border-color: #aaddff;
+}
+
 .controls {
     position: fixed;
     bottom: 20px;
@@ -184,6 +223,21 @@ h1 { position: absolute; top: 10px; left: 10px; z-index: 100; color: white; }
         bottom: 20px;
         right: 10px;
         gap: 8px;
+    }
+
+    .action-panel {
+        bottom: 72px;
+        width: calc(100vw - 20px);
+        max-width: 560px;
+        padding: 8px 10px;
+        gap: 6px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .action-btn {
+        font-size: 13px;
+        padding: 8px 12px;
     }
 
     .controls button {

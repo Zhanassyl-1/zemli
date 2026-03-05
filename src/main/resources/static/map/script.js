@@ -29,6 +29,7 @@ let loadedBuildings = [];
 let homeX = 0;
 let homeY = 0;
 let mapCanvas = null;
+let actionMode = null;
 const SPECIAL_BUILDING = {
   x: 12,
   y: 8,
@@ -419,6 +420,49 @@ window.onload = function () {
     });
   });
 
+  function setActionMode(mode, buttonId, label) {
+    actionMode = mode;
+    document.querySelectorAll('.action-btn').forEach(b => b.classList.remove('active'));
+    const button = document.getElementById(buttonId);
+    if (button) {
+      button.classList.add('active');
+    }
+    console.log(label);
+  }
+
+  const actionBuild = document.getElementById('actionBuild');
+  const actionMove = document.getElementById('actionMove');
+  const actionArmy = document.getElementById('actionArmy');
+  const actionHome = document.getElementById('actionHome');
+
+  if (actionBuild) {
+    actionBuild.addEventListener('click', () => {
+      setActionMode('build', 'actionBuild', '🏗️ Режим строительства');
+    });
+  }
+
+  if (actionMove) {
+    actionMove.addEventListener('click', () => {
+      setActionMode('move', 'actionMove', '🚚 Режим перемещения');
+    });
+  }
+
+  if (actionArmy) {
+    actionArmy.addEventListener('click', () => {
+      setActionMode('army', 'actionArmy', '⚔️ Режим армии');
+    });
+  }
+
+  if (actionHome) {
+    actionHome.addEventListener('click', () => {
+      if (window.buildings && window.buildings.length > 0) {
+        const home = window.buildings[0];
+        cameraX = ((home.x + CENTER_X) * TILE_SIZE * scale) - canvas.width / 2;
+        cameraY = ((home.y + CENTER_Y) * TILE_SIZE * scale) - canvas.height / 2;
+      }
+    });
+  }
+
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected'));
@@ -554,11 +598,7 @@ window.onload = function () {
   });
 
   canvas.addEventListener('click', async (e) => {
-    if (!selectedBuilding) return;
-    if (!TELEGRAM_USER_ID) {
-      alert('❌ Не удалось определить Telegram userId');
-      return;
-    }
+    if (!actionMode) return;
 
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -568,6 +608,26 @@ window.onload = function () {
 
     const tileX = Math.floor(worldX) - CENTER_X;
     const tileY = Math.floor(worldY) - CENTER_Y;
+
+    if (actionMode === 'move') {
+      console.log(`🚚 Переместить в (${tileX}, ${tileY})`);
+      return;
+    }
+    if (actionMode === 'army') {
+      console.log(`⚔️ Отправить армию на (${tileX}, ${tileY})`);
+      return;
+    }
+    if (actionMode !== 'build') {
+      return;
+    }
+    if (!selectedBuilding) {
+      console.log(`🏗️ Построить на (${tileX}, ${tileY})`);
+      return;
+    }
+    if (!TELEGRAM_USER_ID) {
+      alert('❌ Не удалось определить Telegram userId');
+      return;
+    }
 
     try {
       const response = await fetch(`${API_BASE}/api/build`, {
