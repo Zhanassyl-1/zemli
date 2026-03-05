@@ -28,6 +28,13 @@ let selectedBuilding = null;
 let loadedBuildings = [];
 let homeX = 0;
 let homeY = 0;
+const SPECIAL_BUILDING = {
+  x: 12,
+  y: 8,
+  width: 2,
+  height: 2,
+  color: '#8B8B8B'
+};
 
 const BIOME = {
   OCEAN: 0,
@@ -73,6 +80,14 @@ function setHome(x, y) {
   homeX = x;
   homeY = y;
   console.log(`🏠 Дом установлен на (${x}, ${y})`);
+}
+
+function centerCameraOnRelativeArea(relX, relY, width = 1, height = 1) {
+  const tile = TILE_SIZE * scale;
+  const worldCenterX = relX + CENTER_X + (width / 2);
+  const worldCenterY = relY + CENTER_Y + (height / 2);
+  cameraX = worldCenterX * tile - window.innerWidth / 2;
+  cameraY = worldCenterY * tile - window.innerHeight / 2;
 }
 
 function idx(x, y) {
@@ -306,6 +321,34 @@ function drawMap(ctx, canvas) {
   }
 }
 
+function drawSpecialBuilding(ctx, canvas) {
+  const tile = TILE_SIZE * scale;
+  if (tile <= 0.01) return;
+
+  const worldX = SPECIAL_BUILDING.x + CENTER_X;
+  const worldY = SPECIAL_BUILDING.y + CENTER_Y;
+  const drawX = worldX * tile - cameraX;
+  const drawY = worldY * tile - cameraY;
+  const widthPx = SPECIAL_BUILDING.width * tile;
+  const heightPx = SPECIAL_BUILDING.height * tile;
+
+  if (
+    drawX > canvas.width ||
+    drawY > canvas.height ||
+    drawX + widthPx < 0 ||
+    drawY + heightPx < 0
+  ) {
+    return;
+  }
+
+  ctx.fillStyle = SPECIAL_BUILDING.color;
+  ctx.fillRect(drawX, drawY, widthPx, heightPx);
+
+  ctx.strokeStyle = '#5f5f5f';
+  ctx.lineWidth = Math.max(1, tile * 0.08);
+  ctx.strokeRect(drawX, drawY, widthPx, heightPx);
+}
+
 function drawBuildings(ctx) {
   const tile = TILE_SIZE * scale;
   if (tile <= 0.01 || !loadedBuildings.length) return;
@@ -534,15 +577,29 @@ window.onload = function () {
   const zoomIn = document.getElementById('zoomIn');
   const zoomOut = document.getElementById('zoomOut');
   const home = document.getElementById('home');
+  const toBuilding = document.getElementById('toBuilding');
   const homeInfo = document.getElementById('homeInfo');
 
   if (zoomIn) zoomIn.onclick = () => { scale *= 1.4; };
   if (zoomOut) zoomOut.onclick = () => { scale /= 1.4; };
   if (home) home.onclick = () => {
-    cameraX = (homeX + CENTER_X) * TILE_SIZE * scale - window.innerWidth / 2;
-    cameraY = (homeY + CENTER_Y) * TILE_SIZE * scale - window.innerHeight / 2;
+    centerCameraOnRelativeArea(homeX, homeY, 1, 1);
     if (homeInfo) {
       homeInfo.textContent = `🏰 Дом: (${homeX}, ${homeY})`;
+      setTimeout(() => {
+        homeInfo.textContent = '';
+      }, 2000);
+    }
+  };
+  if (toBuilding) toBuilding.onclick = () => {
+    centerCameraOnRelativeArea(
+      SPECIAL_BUILDING.x,
+      SPECIAL_BUILDING.y,
+      SPECIAL_BUILDING.width,
+      SPECIAL_BUILDING.height
+    );
+    if (homeInfo) {
+      homeInfo.textContent = `🏠 Здание: (${SPECIAL_BUILDING.x}, ${SPECIAL_BUILDING.y})`;
       setTimeout(() => {
         homeInfo.textContent = '';
       }, 2000);
@@ -555,6 +612,7 @@ window.onload = function () {
   function animate() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawMap(ctx, canvas);
+    drawSpecialBuilding(ctx, canvas);
     drawBuildings(ctx);
     requestAnimationFrame(animate);
   }

@@ -107,6 +107,18 @@ h1 { position: absolute; top: 10px; left: 10px; z-index: 100; color: white; }
     background: #5a7a9a;
 }
 
+.controls button#toBuilding {
+    background: #5f5f5f;
+    border-color: #8b8b8b;
+    width: auto;
+    padding: 0 12px;
+    font-size: 14px;
+}
+
+.controls button#toBuilding:hover {
+    background: #767676;
+}
+
 .home-info {
     position: fixed;
     bottom: 60px;
