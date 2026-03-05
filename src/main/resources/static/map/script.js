@@ -28,6 +28,7 @@ let selectedBuilding = null;
 let loadedBuildings = [];
 let homeX = 0;
 let homeY = 0;
+let mapCanvas = null;
 const SPECIAL_BUILDING = {
   x: 12,
   y: 8,
@@ -69,7 +70,10 @@ const BUILDING_ICONS = {
   barracks: '⚔️',
   wall: '🧱',
   tower: '🗼',
-  gold: '💰'
+  gold: '💰',
+  stable: '🐎',
+  library: '📚',
+  tavern: '🍺'
 };
 
 function normalizeBuildingType(rawType) {
@@ -276,7 +280,7 @@ function getBiome(tileX, tileY) {
 
 function drawMap(ctx, canvas) {
   const tile = TILE_SIZE * scale;
-  if (tile <= 0.01) return;
+  if (tile <= 0.01) return null;
 
   let startCol = Math.floor(cameraX / tile);
   let startRow = Math.floor(cameraY / tile);
@@ -319,6 +323,8 @@ function drawMap(ctx, canvas) {
     );
     ctx.stroke();
   }
+
+  return { startCol, startRow, endCol, endRow };
 }
 
 function drawSpecialBuilding(ctx, canvas) {
@@ -349,28 +355,47 @@ function drawSpecialBuilding(ctx, canvas) {
   ctx.strokeRect(drawX, drawY, widthPx, heightPx);
 }
 
-function drawBuildings(ctx) {
+function drawBuildings(ctx, startCol, startRow, endCol, endRow) {
+  const canvas = mapCanvas;
+  if (!canvas) return;
   const tile = TILE_SIZE * scale;
-  if (tile <= 0.01 || !loadedBuildings.length) return;
+  if (tile <= 0.01) return;
 
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = `${Math.max(12, Math.floor(tile * 0.55))}px "Courier New", monospace`;
+  const buildings = (Array.isArray(window.buildings) && window.buildings.length)
+    ? window.buildings
+    : loadedBuildings;
+  if (!buildings.length) return;
 
-  for (const building of loadedBuildings) {
-    const worldX = building.x + CENTER_X;
-    const worldY = building.y + CENTER_Y;
-    if (worldX < 0 || worldX >= MAP_WIDTH || worldY < 0 || worldY >= MAP_HEIGHT) continue;
+  for (const b of buildings) {
+    const worldCol = b.x + CENTER_X;
+    const worldRow = b.y + CENTER_Y;
+    if (worldCol < 0 || worldCol >= MAP_WIDTH || worldRow < 0 || worldRow >= MAP_HEIGHT) continue;
+    if (worldCol < startCol - 2 || worldCol > endCol + 2 || worldRow < startRow - 2 || worldRow > endRow + 2) continue;
 
-    const drawX = worldX * tile - cameraX;
-    const drawY = worldY * tile - cameraY;
-    if (drawX + tile < 0 || drawY + tile < 0 || drawX > window.innerWidth || drawY > window.innerHeight) continue;
+    const screenX = ((b.x + CENTER_X) * TILE_SIZE * scale) - cameraX;
+    const screenY = ((b.y + CENTER_Y) * TILE_SIZE * scale) - cameraY;
+    if (screenX <= -50 || screenX >= canvas.width + 50 || screenY <= -50 || screenY >= canvas.height + 50) continue;
 
-    const type = normalizeBuildingType(building.type);
-    const icon = BUILDING_ICONS[type] || '🏗️';
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.fillRect(drawX + 2, drawY + 2, tile - 4, tile - 4);
-    ctx.fillText(icon, drawX + tile / 2, drawY + tile / 2);
+    const type = normalizeBuildingType(b.type);
+    let emoji = '🏠';
+    switch (type) {
+      case 'capitol': emoji = '🏰'; break;
+      case 'lumber': emoji = '🪓'; break;
+      case 'mine': emoji = '⛏️'; break;
+      case 'farm': emoji = '🌾'; break;
+      case 'barracks': emoji = '⚔️'; break;
+      case 'wall': emoji = '🧱'; break;
+      case 'tower': emoji = '🗼'; break;
+      case 'gold': emoji = '💰'; break;
+      case 'stable': emoji = '🐎'; break;
+      case 'library': emoji = '📚'; break;
+      case 'tavern': emoji = '🍺'; break;
+      default: emoji = BUILDING_ICONS[type] || '🏠';
+    }
+
+    ctx.font = `${TILE_SIZE * scale * 1.5}px 'Courier New'`;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(emoji, screenX, screenY + TILE_SIZE * scale);
   }
 }
 
@@ -381,6 +406,7 @@ window.onload = function () {
 
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
+  mapCanvas = canvas;
   const biomeInfo = document.getElementById('biomeInfo');
   const coordsEl = document.getElementById('coords');
   const selectedInfo = document.getElementById('selectedBuilding');
@@ -398,7 +424,7 @@ window.onload = function () {
     if (e.key !== 'Escape') return;
     document.querySelectorAll('.build-btn').forEach(b => b.classList.remove('selected'));
     selectedBuilding = null;
-    if (selectedInfo) selectedInfo.textContent = 'Выбрано: —';
+    if (selectedInfo) selectedInfo.textContent = '👆 Выбери здание';
   });
 
   async function loadBuildings() {
@@ -417,6 +443,7 @@ window.onload = function () {
       const response = await fetch(`${API_BASE}/api/buildings?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}`);
       if (!response.ok) return;
       loadedBuildings = await response.json();
+      window.buildings = loadedBuildings;
       if (homeX === 0 && homeY === 0) {
         const capitol = loadedBuildings.find(b => normalizeBuildingType(b.type) === 'capitol');
         if (capitol) setHome(capitol.x, capitol.y);
@@ -567,7 +594,7 @@ window.onload = function () {
       }
       document.querySelectorAll('.build-btn').forEach(b => b.classList.remove('selected'));
       selectedBuilding = null;
-      if (selectedInfo) selectedInfo.textContent = 'Выбрано: —';
+      if (selectedInfo) selectedInfo.textContent = '👆 Выбери здание';
       await loadBuildings();
     } catch (error) {
       console.error('Ошибка строительства:', error);
@@ -611,9 +638,11 @@ window.onload = function () {
 
   function animate() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawMap(ctx, canvas);
+    const visible = drawMap(ctx, canvas);
     drawSpecialBuilding(ctx, canvas);
-    drawBuildings(ctx);
+    if (visible) {
+      drawBuildings(ctx, visible.startCol, visible.startRow, visible.endCol, visible.endRow);
+    }
     requestAnimationFrame(animate);
   }
 

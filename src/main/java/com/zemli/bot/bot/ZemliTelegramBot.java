@@ -29,7 +29,9 @@ import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.webapp.WebAppInfo;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.time.Instant;
@@ -480,6 +482,10 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
 
+        if (handleMainMenuText(chatId, tgId, text)) {
+            return;
+        }
+
         sendText(chatId, "Используй inline кнопки. Нажми /start", startKeyboard());
     }
 
@@ -562,7 +568,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 return;
             }
             if (registrationService.findRegistered(tgId).isPresent()) {
-                sendMapButton(chatId);
+                sendMainMenu(chatId);
             } else {
                 registrationService.begin(tgId);
                 sendText(chatId, "Как назовёшь свою деревню?");
@@ -580,6 +586,33 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
                 return;
             }
             sendMapButton(chatId);
+            return;
+        }
+        if ("/build".equalsIgnoreCase(commandToken) && isPrivate) {
+            Optional<PlayerRecord> p = registrationService.findRegistered(tgId);
+            if (p.isEmpty()) {
+                sendText(chatId, "Сначала зарегистрируйся через /start");
+                return;
+            }
+            sendText(chatId, "🪓 Открой карту и выбери здание слева");
+            return;
+        }
+        if ("/resources".equalsIgnoreCase(commandToken) && isPrivate) {
+            Optional<PlayerRecord> p = registrationService.findRegistered(tgId);
+            if (p.isEmpty()) {
+                sendText(chatId, "Сначала зарегистрируйся через /start");
+                return;
+            }
+            sendResources(chatId);
+            return;
+        }
+        if ("/city".equalsIgnoreCase(commandToken) && isPrivate) {
+            Optional<PlayerRecord> p = registrationService.findRegistered(tgId);
+            if (p.isEmpty()) {
+                sendText(chatId, "Сначала зарегистрируйся через /start");
+                return;
+            }
+            sendCityInfo(chatId);
             return;
         }
         if ("/legend".equalsIgnoreCase(commandToken) && isPrivate) {
@@ -608,6 +641,44 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
             return;
         }
         sendText(chatId, "❌ Неизвестная команда");
+    }
+
+    private boolean handleMainMenuText(long chatId, long tgId, String text) {
+        Optional<PlayerRecord> playerOpt = registrationService.findRegistered(tgId);
+        if (playerOpt.isEmpty()) {
+            sendText(chatId, "Сначала зарегистрируйся через /start");
+            return true;
+        }
+        PlayerRecord player = playerOpt.get();
+        switch (text) {
+            case "🗺️ Карта" -> {
+                sendMapButton(chatId);
+                return true;
+            }
+            case "🏗️ Строить" -> {
+                sendText(chatId, "🪓 Открой карту и выбери здание слева");
+                return true;
+            }
+            case "📊 Ресурсы" -> {
+                sendResources(chatId);
+                return true;
+            }
+            case "🏰 Город" -> {
+                sendCityInfo(chatId);
+                return true;
+            }
+            case "⚔️ Армия" -> {
+                showArmyMenu(chatId, player);
+                return true;
+            }
+            case "👤 Профиль" -> {
+                showCityCompact(chatId, player);
+                return true;
+            }
+            default -> {
+                return false;
+            }
+        }
     }
 
     private boolean handleAdminCommand(Message message, long tgId, long chatId, String text) {
@@ -1262,7 +1333,7 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
         if ("start:open".equals(data)) {
             if (registrationService.findRegistered(tgId).isPresent()) {
-                sendMapButton(chatId);
+                sendMainMenu(chatId);
             } else {
                 registrationService.begin(tgId);
                 sendText(chatId, "Как назовёшь свою деревню?");
@@ -4317,6 +4388,48 @@ public class ZemliTelegramBot extends TelegramLongPollingBot {
 
     private InlineKeyboardButton btn(String text, String callbackData) {
         return InlineKeyboardButton.builder().text(text).callbackData(callbackData).build();
+    }
+
+    private void sendMainMenu(Long chatId) {
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText("🏰 *Главное меню*\nВыбери действие:");
+        message.setParseMode("Markdown");
+
+        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
+        keyboardMarkup.setResizeKeyboard(true);
+        keyboardMarkup.setOneTimeKeyboard(false);
+
+        List<KeyboardRow> keyboard = new ArrayList<>();
+
+        KeyboardRow row1 = new KeyboardRow();
+        row1.add("🗺️ Карта");
+        row1.add("🏗️ Строить");
+        row1.add("⚔️ Армия");
+
+        KeyboardRow row2 = new KeyboardRow();
+        row2.add("🏰 Город");
+        row2.add("📊 Ресурсы");
+        row2.add("👤 Профиль");
+
+        keyboard.add(row1);
+        keyboard.add(row2);
+        keyboardMarkup.setKeyboard(keyboard);
+        message.setReplyMarkup(keyboardMarkup);
+
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            log.error("Failed to send main menu", e);
+        }
+    }
+
+    private void sendResources(Long chatId) {
+        sendText(chatId, "📊 Ресурсы\n🪵 Дерево: 100\n⛏️ Железо: 50\n💰 Золото: 200\n🌾 Еда: 150");
+    }
+
+    private void sendCityInfo(Long chatId) {
+        sendText(chatId, "🏰 Город\nУровень: 1\nНаселение: 10\nПостроек: 0");
     }
 
     private void sendMapButton(Long chatId) {
