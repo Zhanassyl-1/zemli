@@ -154,23 +154,33 @@
         <button id="toBuilding">🏠 К зданию</button>
     </div>
 
-    <!-- Панель построек -->
-    <div class="build-panel">
-        <div class="build-title">🏗️ Доступные постройки</div>
-        <div class="build-buttons">
-            <button class="build-btn" data-type="capitol">🏰 Ратуша</button>
-            <button class="build-btn" data-type="lumber">🪓 Лесопилка</button>
-            <button class="build-btn" data-type="mine">⛏️ Шахта</button>
-            <button class="build-btn" data-type="farm">🌾 Ферма</button>
-            <button class="build-btn" data-type="barracks">⚔️ Казарма</button>
-            <button class="build-btn" data-type="wall">🧱 Стена</button>
-            <button class="build-btn" data-type="tower">🗼 Вышка</button>
-            <button class="build-btn" data-type="gold">💰 Золотая шахта</button>
-            <button class="build-btn" data-type="stable">🐎 Конюшня</button>
-            <button class="build-btn" data-type="library">📚 Библиотека</button>
-            <button class="build-btn" data-type="tavern">🍺 Таверна</button>
+    <!-- Панель зданий (слева) -->
+    <div class="build-panel" id="buildPanel">
+        <div class="panel-title">🏗️ Строительство</div>
+        <div class="panel-buttons">
+            <button class="emoji-btn" data-type="capitol">🏰</button>
+            <button class="emoji-btn" data-type="lumber">🪓</button>
+            <button class="emoji-btn" data-type="mine">⛏️</button>
+            <button class="emoji-btn" data-type="farm">🌾</button>
+            <button class="emoji-btn" data-type="barracks">⚔️</button>
+            <button class="emoji-btn" data-type="wall">🧱</button>
+            <button class="emoji-btn" data-type="tower">🗼</button>
+            <button class="emoji-btn" data-type="gold">💰</button>
+            <button class="emoji-btn" data-type="stable">🐎</button>
+            <button class="emoji-btn" data-type="library">📚</button>
+            <button class="emoji-btn" data-type="tavern">🍺</button>
         </div>
-        <div class="selected-info" id="selectedBuilding">👆 Выбери здание</div>
+    </div>
+
+    <!-- Панель войск (справа) -->
+    <div class="army-panel" id="armyPanel">
+        <div class="panel-title">⚔️ Войска</div>
+        <div class="panel-buttons">
+            <button class="emoji-btn" data-type="recruit">🛡️</button>
+            <button class="emoji-btn" data-type="archer">🏹</button>
+            <button class="emoji-btn" data-type="cavalry">🐎</button>
+            <button class="emoji-btn" data-type="heal">💊</button>
+        </div>
     </div>
 
     <canvas id="gameCanvas"></canvas>

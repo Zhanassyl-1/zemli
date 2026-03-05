@@ -410,22 +410,19 @@ window.onload = function () {
   mapCanvas = canvas;
   const biomeInfo = document.getElementById('biomeInfo');
   const coordsEl = document.getElementById('coords');
-  const selectedInfo = document.getElementById('selectedBuilding');
 
-  document.querySelectorAll('.build-btn').forEach(btn => {
+  document.querySelectorAll('.emoji-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.build-btn').forEach(b => b.classList.remove('selected'));
+      document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       selectedBuilding = btn.dataset.type;
-      if (selectedInfo) selectedInfo.textContent = `Выбрано: ${btn.textContent}`;
     });
   });
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    document.querySelectorAll('.build-btn').forEach(b => b.classList.remove('selected'));
+    document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected'));
     selectedBuilding = null;
-    if (selectedInfo) selectedInfo.textContent = '👆 Выбери здание';
   });
 
   async function loadBuildings() {
@@ -594,9 +591,8 @@ window.onload = function () {
       if (selectedBuilding === 'capitol') {
         setHome(tileX, tileY);
       }
-      document.querySelectorAll('.build-btn').forEach(b => b.classList.remove('selected'));
+      document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected'));
       selectedBuilding = null;
-      if (selectedInfo) selectedInfo.textContent = '👆 Выбери здание';
       await loadBuildings();
     } catch (error) {
       console.error('Ошибка строительства:', error);

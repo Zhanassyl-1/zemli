@@ -2,67 +2,67 @@ body { margin: 0; padding: 0; background: #111; color: white; }
 h1 { position: absolute; top: 10px; left: 10px; z-index: 100; color: white; }
 #gameCanvas { display: block; width: 100vw; height: 100vh; }
 
-.build-panel {
+.build-panel, .army-panel {
     position: fixed;
-    left: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: rgba(30, 30, 30, 0.95);
+    background: rgba(30, 30, 30, 0.9);
     border: 2px solid #444;
     border-radius: 15px;
-    padding: 15px;
+    padding: 10px;
     color: white;
-    font-family: 'Courier New', monospace;
     z-index: 1000;
     backdrop-filter: blur(5px);
-    max-height: 80vh;
-    overflow-y: auto;
 }
 
-.build-title {
-    font-size: 18px;
-    font-weight: bold;
-    margin-bottom: 15px;
+.build-panel {
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.army-panel {
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.panel-title {
     text-align: center;
+    margin-bottom: 10px;
+    font-size: 14px;
     color: #ffd700;
 }
 
-.build-buttons {
+.panel-buttons {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.build-btn {
+.emoji-btn {
     background: #2a2a2a;
     border: 1px solid #555;
     color: white;
-    padding: 10px 15px;
-    border-radius: 8px;
-    font-size: 16px;
+    width: 50px;
+    height: 50px;
+    border-radius: 10px;
+    font-size: 30px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.2s;
-    text-align: left;
-    font-family: 'Courier New', monospace;
 }
 
-.build-btn:hover {
+.emoji-btn:hover {
     background: #3a3a3a;
     border-color: #888;
+    transform: scale(1.1);
 }
 
-.build-btn.selected {
+.emoji-btn.selected {
     background: #4a6a8a;
     border-color: #aaddff;
     box-shadow: 0 0 10px #4a6a8a;
-}
-
-.selected-info {
-    margin-top: 15px;
-    padding-top: 10px;
-    border-top: 1px solid #444;
-    font-size: 14px;
-    color: #aaddff;
 }
 
 .controls {
@@ -134,30 +134,30 @@ h1 { position: absolute; top: 10px; left: 10px; z-index: 100; color: white; }
 }
 
 @media (max-width: 768px) {
-    .build-panel {
+    .build-panel,
+    .army-panel {
         left: 10px;
+        right: auto;
         top: auto;
-        bottom: 20px;
         transform: none;
-        max-width: calc(100vw - 20px);
-        max-height: 40vh;
-        overflow-y: auto;
-        flex-direction: row;
-        flex-wrap: wrap;
     }
 
-    .build-buttons {
-        flex-direction: row;
-        flex-wrap: wrap;
-        justify-content: center;
+    .build-panel {
+        bottom: 20px;
     }
 
-    .build-btn {
-        flex: 1 1 auto;
-        min-width: 70px;
-        padding: 8px 5px;
-        font-size: 14px;
-        justify-content: center;
+    .army-panel {
+        bottom: 320px;
+    }
+
+    .panel-buttons {
+        gap: 6px;
+    }
+
+    .emoji-btn {
+        width: 42px;
+        height: 42px;
+        font-size: 24px;
     }
 
     .title {
