@@ -83,6 +83,12 @@ let inventory = {};
 let gameResources = null;
 let loadedUnits = [];
 let enemyMarkers = [];
+let resourceNodes = [];
+let dirty = true;
+
+const VIEW_RADIUS = 15;
+const FOG_COLOR = "#0f1720";
+const playerHome = { x: 0, y: 0 };
 
 const buildingEmojiMap = {
   capitol: "🏰",
@@ -277,6 +283,43 @@ function assignBiomes(landThreshold) {
   }
 }
 
+function generateBiomeMap() {
+  console.log("🗺️ Генерация биомов...");
+  generateBiomeMap();
+  generateResourceNodes();
+  console.log("✅ Биомы сгенерированы");
+}
+
+function generateResourceNodes() {
+  console.log("📦 Генерация ресурсов...");
+  resourceNodes = [];
+  for (let y = 0; y < MAP_HEIGHT; y += 2) {
+    for (let x = 0; x < MAP_WIDTH; x += 2) {
+      const biome = biomeMap[idx(x, y)];
+      const relX = x - CENTER_X;
+      const relY = y - CENTER_Y;
+      const h = Math.abs((relX * 73856093) ^ (relY * 19349663));
+      let icon = null;
+      if (biome === BIOME.FOREST && h % 9 === 0) icon = "🪵";
+      else if (biome === BIOME.MOUNTAIN && h % 11 === 0) icon = "⛏️";
+      else if (biome === BIOME.PLAINS && h % 13 === 0) icon = "🌾";
+      else if (biome === BIOME.DESERT && h % 27 === 0) icon = "💰";
+      if (icon) resourceNodes.push({ x: relX, y: relY, icon });
+    }
+  }
+  console.log("✅ Ресурсы сгенерированы:", resourceNodes.length);
+}
+
+function requestRender() {
+  dirty = true;
+}
+
+function isWithinViewRadius(relX, relY) {
+  const dx = relX - playerHome.x;
+  const dy = relY - playerHome.y;
+  return (dx * dx + dy * dy) <= (VIEW_RADIUS * VIEW_RADIUS);
+}
+
 function biomeName(code) {
   switch (code) {
     case BIOME.OCEAN: return "Океан";
@@ -332,6 +375,24 @@ function findCapitol() {
   return cap || null;
 }
 
+function ensureStartingHome() {
+  const capitol = loadedBuildings.find((b) => normalizeType(b.type) === "capitol");
+  const house = loadedBuildings.find((b) => normalizeType(b.type) === "house");
+  const home = capitol || house;
+  if (home) {
+    playerHome.x = Number(home.x || 0);
+    playerHome.y = Number(home.y || 0);
+    console.log("🏠 Дом загружен:", playerHome);
+    return;
+  }
+
+  loadedBuildings.push({ x: 0, y: 0, type: "house", ownerId: ACTIVE_PLAYER_ID || 0, local: true });
+  window.buildings = loadedBuildings;
+  playerHome.x = 0;
+  playerHome.y = 0;
+  console.log("🏠 Добавлен стартовый дом: (0,0)");
+}
+
 async function placeBuilding(x, y, type) {
   if (!ACTIVE_PLAYER_ID) {
     console.warn("No Telegram user id; build is disabled.");
@@ -385,10 +446,15 @@ async function loadGame() {
     window.buildings = loadedBuildings;
     window.inventory = inventory;
     window.resources = gameResources;
+    ensureStartingHome();
+    if (mapCanvas) {
+      centerOnRelative(playerHome.x, playerHome.y);
+    }
     renderInventoryPanel();
     if (mapCtx && mapCanvas) {
       drawMap(mapCtx, mapCanvas);
     }
+    requestRender();
   } catch (e) {
     console.error("❌ Ошибка загрузки:", e);
   }
@@ -508,6 +574,7 @@ function setActionMode(mode) {
     document.getElementById(activeId)?.classList.add("active");
   }
   updateModeText();
+  requestRender();
 }
 
 function setArmyOrderMode(mode) {
@@ -531,12 +598,8 @@ function bindUi() {
   document.getElementById("actionAttack")?.addEventListener("click", () => setActionMode("attack"));
 
   document.getElementById("actionHome")?.addEventListener("click", () => {
-    const capitol = findCapitol();
-    if (capitol) {
-      centerOnRelative(capitol.x, capitol.y);
-    } else {
-      centerOnRelative(0, 0);
-    }
+    centerOnRelative(playerHome.x, playerHome.y);
+    requestRender();
   });
 
   document.getElementById("actionCancel")?.addEventListener("click", () => {
@@ -545,6 +608,7 @@ function bindUi() {
     selectedUnitType = null;
     document.querySelectorAll(".action-btn, .build-btn, .unit-btn").forEach((b) => b.classList.remove("active", "selected"));
     updateModeText();
+    requestRender();
   });
 
   document.getElementById("armyModeRecruit")?.addEventListener("click", () => setArmyOrderMode("recruit"));
@@ -562,9 +626,11 @@ function bindUi() {
 
   document.getElementById("zoomIn")?.addEventListener("click", () => {
     scale = Math.min(3.0, scale * 1.2);
+    requestRender();
   });
   document.getElementById("zoomOut")?.addEventListener("click", () => {
     scale = Math.max(0.25, scale / 1.2);
+    requestRender();
   });
 
   if (window.innerWidth <= 900) {
@@ -630,6 +696,7 @@ async function onMapClick(relX, relY) {
         selectedBuilding = null;
       }
       renderInventoryPanel();
+      requestRender();
     }
     return;
   }
@@ -640,12 +707,14 @@ async function onMapClick(relX, relY) {
     console.log(`🚚 Переместить в (${relX}, ${relY})`);
     if (selectedUnitType && armyOrderMode === "recruit") {
       addUnit(selectedUnitType, relX, relY);
+      requestRender();
       return;
     }
     if (armyOrderMode === "move") {
       const unit = pickNearestUnit(relX, relY);
       if (unit) {
         await moveUnit(unit.id, relX, relY);
+        requestRender();
       }
     }
     return;
@@ -683,6 +752,7 @@ function handleMouseMove(e) {
   cameraY -= dy;
   lastPointerX = e.clientX;
   lastPointerY = e.clientY;
+  requestRender();
 }
 
 function handleWheel(e) {
@@ -698,6 +768,7 @@ function handleWheel(e) {
 
   cameraX = (worldX * TILE_SIZE * scale) - mouseX;
   cameraY = (worldY * TILE_SIZE * scale) - mouseY;
+  requestRender();
 }
 
 function touchDistance(t1, t2) {
@@ -730,10 +801,12 @@ function handleTouchMove(e) {
     cameraY -= dy;
     lastPointerX = cx;
     lastPointerY = cy;
+    requestRender();
   } else if (touchMode === "pinch" && e.touches.length === 2) {
     const currentDistance = touchDistance(e.touches[0], e.touches[1]);
     if (pinchStartDistance > 0) {
       scale = Math.max(0.25, Math.min(3.0, pinchStartScale * (currentDistance / pinchStartDistance)));
+      requestRender();
     }
   }
 }
@@ -765,6 +838,13 @@ function drawMap(ctx, canvas) {
     const y = (row * tile) - cameraY;
     for (let col = startCol; col < endCol; col++) {
       const x = (col * tile) - cameraX;
+      const relX = col - CENTER_X;
+      const relY = row - CENTER_Y;
+      if (!isWithinViewRadius(relX, relY)) {
+        ctx.fillStyle = FOG_COLOR;
+        ctx.fillRect(x, y, tile + 1, tile + 1);
+        continue;
+      }
       const b = biomeMap[idx(col, row)];
       ctx.fillStyle = COLORS[b] || "#90be6d";
       ctx.fillRect(x, y, tile + 1, tile + 1);
@@ -775,21 +855,16 @@ function drawMap(ctx, canvas) {
 }
 
 function drawResourceMarkers(ctx, view) {
-  const { startCol, startRow, endCol, endRow, tile } = view;
+  const { tile } = view;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `${Math.max(11, tile * 0.45)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
 
-  for (let col = startCol; col < endCol; col += 2) {
-    for (let row = startRow; row < endRow; row += 2) {
-      const relX = col - CENTER_X;
-      const relY = row - CENTER_Y;
-      const icon = resourceAt(relX, relY);
-      if (!icon) continue;
-      const x = (col * tile) - cameraX + tile / 2;
-      const y = (row * tile) - cameraY + tile / 2;
-      ctx.fillText(icon, x, y);
-    }
+  for (const node of resourceNodes) {
+    if (!isWithinViewRadius(node.x, node.y)) continue;
+    const pos = worldToScreen(node.x, node.y);
+    if (pos.x + tile < -40 || pos.y + tile < -40 || pos.x > mapCanvas.width + 40 || pos.y > mapCanvas.height + 40) continue;
+    ctx.fillText(node.icon, pos.x + tile / 2, pos.y + tile / 2);
   }
 }
 
@@ -854,6 +929,10 @@ function drawEnemies(ctx, view) {
 }
 
 function render() {
+  if (!dirty) {
+    requestAnimationFrame(render);
+    return;
+  }
   mapCtx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
   const view = drawMap(mapCtx, mapCanvas);
   if (!view) {
@@ -864,6 +943,7 @@ function render() {
   drawBuildings(mapCtx, view);
   drawUnits(mapCtx, view);
   drawEnemies(mapCtx, view);
+  dirty = false;
   requestAnimationFrame(render);
 }
 
@@ -880,6 +960,7 @@ async function bootstrap() {
   const resize = () => {
     mapCanvas.width = window.innerWidth;
     mapCanvas.height = window.innerHeight;
+    requestRender();
   };
   resize();
   window.addEventListener("resize", resize);
@@ -910,6 +991,7 @@ async function bootstrap() {
   await loadGameState();
   setInterval(loadGameState, 5000);
   renderInventoryPanel();
+  requestRender();
   render();
 }
 
