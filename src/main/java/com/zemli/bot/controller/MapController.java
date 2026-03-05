@@ -80,7 +80,16 @@ public class MapController {
 
         return new MapStateResponse(
                 new KingdomDto(kingdom.race(), kingdom.homeX(), kingdom.homeY(), kingdom.level(), kingdom.createdAt().toEpochMilli()),
-                new ResourcesDto(resources.wood(), resources.stone(), resources.iron(), resources.gold(), resources.food()),
+                new ResourcesDto(
+                        resources.wood(),
+                        resources.stone(),
+                        resources.iron(),
+                        resources.gold(),
+                        resources.food(),
+                        resources.population(),
+                        resources.maxPopulation(),
+                        resources.storageLimit()
+                ),
                 buildings
         );
     }
@@ -154,7 +163,16 @@ public class MapController {
     public record KingdomDto(String race, int homeX, int homeY, int level, long createdAt) {
     }
 
-    public record ResourcesDto(int wood, int stone, int iron, int gold, int food) {
+    public record ResourcesDto(
+            int wood,
+            int stone,
+            int iron,
+            int gold,
+            int food,
+            int population,
+            int maxPopulation,
+            int storageLimit
+    ) {
     }
 
     public record MapStateResponse(KingdomDto kingdom, ResourcesDto resources, List<MapBuildingDto> buildings) {

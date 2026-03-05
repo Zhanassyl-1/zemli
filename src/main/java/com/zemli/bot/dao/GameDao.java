@@ -132,7 +132,14 @@ public class GameDao {
 
     private void migrateResourcesSchemaIfNeeded() {
         jdbcTemplate.execute("ALTER TABLE resources ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP NOT NULL DEFAULT NOW()");
+        jdbcTemplate.execute("ALTER TABLE resources ADD COLUMN IF NOT EXISTS population INTEGER NOT NULL DEFAULT 10");
+        jdbcTemplate.execute("ALTER TABLE resources ADD COLUMN IF NOT EXISTS max_population INTEGER NOT NULL DEFAULT 10");
+        jdbcTemplate.execute("ALTER TABLE resources ADD COLUMN IF NOT EXISTS storage_limit INTEGER NOT NULL DEFAULT 1000");
         jdbcTemplate.update("UPDATE resources SET last_updated = NOW() WHERE last_updated IS NULL");
+        jdbcTemplate.update("UPDATE resources SET population = 10 WHERE population IS NULL OR population < 0");
+        jdbcTemplate.update("UPDATE resources SET max_population = 10 WHERE max_population IS NULL OR max_population < 1");
+        jdbcTemplate.update("UPDATE resources SET storage_limit = 1000 WHERE storage_limit IS NULL OR storage_limit < 1");
+        jdbcTemplate.update("UPDATE resources SET population = LEAST(population, max_population) WHERE population > max_population");
     }
 
     private void migrateKingdomSchemaIfNeeded() {
@@ -198,8 +205,8 @@ public class GameDao {
 
         jdbcTemplate.update(
                 """
-                INSERT INTO resources(player_id, wood, stone, food, iron, gold, mana, alcohol)
-                VALUES (?, 15000, 12000, 18000, 8000, 5000, 2000, 1000)
+                INSERT INTO resources(player_id, wood, stone, food, iron, gold, mana, alcohol, population, max_population, storage_limit)
+                VALUES (?, 500, 300, 200, 100, 50, 0, 0, 10, 10, 1000)
                 """,
                 created.id()
         );
@@ -221,7 +228,7 @@ public class GameDao {
     public ResourcesRecord loadResources(long playerId) {
         return jdbcTemplate.queryForObject(
                 """
-                SELECT wood, stone, food, iron, gold, mana, alcohol
+                SELECT wood, stone, food, iron, gold, mana, alcohol, population, max_population, storage_limit
                 FROM resources
                 WHERE player_id = ?
                 """,
@@ -232,7 +239,10 @@ public class GameDao {
                         rs.getInt("iron"),
                         rs.getInt("gold"),
                         rs.getInt("mana"),
-                        rs.getInt("alcohol")
+                        rs.getInt("alcohol"),
+                        rs.getInt("population"),
+                        rs.getInt("max_population"),
+                        rs.getInt("storage_limit")
                 ),
                 playerId
         );
@@ -412,8 +422,13 @@ public class GameDao {
         jdbcTemplate.update(
                 """
                 UPDATE resources
-                SET wood = wood + ?, stone = stone + ?, food = food + ?, iron = iron + ?,
-                    gold = gold + ?, mana = mana + ?, alcohol = alcohol + ?
+                SET wood = LEAST(storage_limit, wood + ?),
+                    stone = LEAST(storage_limit, stone + ?),
+                    food = LEAST(storage_limit, food + ?),
+                    iron = LEAST(storage_limit, iron + ?),
+                    gold = LEAST(storage_limit, gold + ?),
+                    mana = mana + ?,
+                    alcohol = alcohol + ?
                 WHERE player_id = ?
                 """,
                 cost.wood(), cost.stone(), cost.food(), cost.iron(), cost.gold(), cost.mana(), cost.alcohol(), playerId
@@ -437,6 +452,13 @@ public class GameDao {
             return;
         }
         String column = resourceColumn(resourceKey);
+        if (isStorageLimitedColumn(column)) {
+            jdbcTemplate.update(
+                    "UPDATE resources SET " + column + " = LEAST(storage_limit, " + column + " + ?) WHERE player_id = ?",
+                    amount, playerId
+            );
+            return;
+        }
         jdbcTemplate.update(
                 "UPDATE resources SET " + column + " = " + column + " + ? WHERE player_id = ?",
                 amount, playerId
@@ -621,6 +643,12 @@ public class GameDao {
     }
 
     public void saveMapBuilding(long ownerId, int x, int y, String type) {
+        String previousType = jdbcTemplate.query(
+                "SELECT building_type FROM map_buildings WHERE owner_id = ? AND x = ? AND y = ?",
+                (rs, rowNum) -> rs.getString("building_type"),
+                ownerId, x, y
+        ).stream().findFirst().orElse(null);
+
         long now = Instant.now().toEpochMilli();
         jdbcTemplate.update(
                 """
@@ -631,6 +659,58 @@ public class GameDao {
                 """,
                 ownerId, x, y, type, now
         );
+        applyMapBuildingSideEffects(ownerId, previousType, type);
+    }
+
+    private void applyMapBuildingSideEffects(long ownerId, String oldType, String newType) {
+        String oldNormalized = normalizeMapBuildingType(oldType);
+        String newNormalized = normalizeMapBuildingType(newType);
+
+        if (!oldNormalized.equals(newNormalized)) {
+            if ("house".equals(newNormalized)) {
+                jdbcTemplate.update(
+                        """
+                        UPDATE resources
+                        SET max_population = max_population + 5,
+                            population = LEAST(max_population + 5, population + 5)
+                        WHERE player_id = ?
+                        """,
+                        ownerId
+                );
+            }
+            if ("house".equals(oldNormalized)) {
+                jdbcTemplate.update(
+                        """
+                        UPDATE resources
+                        SET max_population = GREATEST(10, max_population - 5),
+                            population = LEAST(population, GREATEST(10, max_population - 5))
+                        WHERE player_id = ?
+                        """,
+                        ownerId
+                );
+            }
+            if ("warehouse".equals(newNormalized)) {
+                jdbcTemplate.update(
+                        "UPDATE resources SET storage_limit = storage_limit + 500 WHERE player_id = ?",
+                        ownerId
+                );
+            }
+            if ("warehouse".equals(oldNormalized)) {
+                jdbcTemplate.update(
+                        """
+                        UPDATE resources
+                        SET storage_limit = GREATEST(1000, storage_limit - 500),
+                            wood = LEAST(wood, GREATEST(1000, storage_limit - 500)),
+                            stone = LEAST(stone, GREATEST(1000, storage_limit - 500)),
+                            food = LEAST(food, GREATEST(1000, storage_limit - 500)),
+                            iron = LEAST(iron, GREATEST(1000, storage_limit - 500)),
+                            gold = LEAST(gold, GREATEST(1000, storage_limit - 500))
+                        WHERE player_id = ?
+                        """,
+                        ownerId
+                );
+            }
+        }
     }
 
     public List<MapBuilding> loadMapBuildingsInArea(int minX, int minY, int maxX, int maxY) {
@@ -672,6 +752,64 @@ public class GameDao {
                 ),
                 ownerId
         );
+    }
+
+    public Map<String, Integer> loadMapBuildingCounts(long ownerId) {
+        Map<String, Integer> countsByType = new HashMap<>();
+        jdbcTemplate.query(
+                """
+                SELECT building_type, COUNT(*) AS cnt
+                FROM map_buildings
+                WHERE owner_id = ?
+                GROUP BY building_type
+                """,
+                (rs, rowNum) -> {
+                    countsByType.put(normalizeMapBuildingType(rs.getString("building_type")), rs.getInt("cnt"));
+                    return null;
+                },
+                ownerId
+        );
+        return countsByType;
+    }
+
+    public Map<String, Integer> calculateHourlyMapIncome(long ownerId) {
+        Map<String, Integer> countsByType = loadMapBuildingCounts(ownerId);
+        ResourcesRecord resources = loadResources(ownerId);
+        int freeWorkers = Math.max(0, resources.population());
+
+        int lumberCount = allocateActiveBuildings(countsByType.getOrDefault("lumber", 0), 1, freeWorkers);
+        freeWorkers -= lumberCount;
+        int farmCount = allocateActiveBuildings(countsByType.getOrDefault("farm", 0), 2, freeWorkers);
+        freeWorkers -= farmCount * 2;
+        int mineCount = allocateActiveBuildings(countsByType.getOrDefault("mine", 0), 2, freeWorkers);
+        freeWorkers -= mineCount * 2;
+        int ironMineCount = allocateActiveBuildings(countsByType.getOrDefault("iron_mine", 0), 2, freeWorkers);
+
+        Map<String, Integer> hourly = new HashMap<>();
+        hourly.put("wood", lumberCount * 5);
+        hourly.put("stone", mineCount * 3);
+        hourly.put("iron", ironMineCount * 2);
+        hourly.put("food", farmCount * 10);
+        return hourly;
+    }
+
+    public int calculateFreeWorkers(long ownerId) {
+        Map<String, Integer> countsByType = loadMapBuildingCounts(ownerId);
+        ResourcesRecord resources = loadResources(ownerId);
+        int freeWorkers = Math.max(0, resources.population());
+
+        int lumberCount = allocateActiveBuildings(countsByType.getOrDefault("lumber", 0), 1, freeWorkers);
+        freeWorkers -= lumberCount;
+        int farmCount = allocateActiveBuildings(countsByType.getOrDefault("farm", 0), 2, freeWorkers);
+        freeWorkers -= farmCount * 2;
+        int mineCount = allocateActiveBuildings(countsByType.getOrDefault("mine", 0), 2, freeWorkers);
+        freeWorkers -= mineCount * 2;
+        int ironMineCount = allocateActiveBuildings(countsByType.getOrDefault("iron_mine", 0), 2, freeWorkers);
+        freeWorkers -= ironMineCount * 2;
+        int goldMineCount = allocateActiveBuildings(countsByType.getOrDefault("gold_mine", 0), 2, freeWorkers);
+        freeWorkers -= goldMineCount * 2;
+
+        return Math.max(0, freeWorkers);
     }
 
     public Optional<KingdomState> loadKingdom(long playerId) {
@@ -754,11 +892,18 @@ public class GameDao {
                     playerId
             );
 
-            int lumberCount = countsByType.getOrDefault("lumber", 0);
-            int mineCount = countsByType.getOrDefault("mine", 0);
-            int ironMineCount = countsByType.getOrDefault("iron_mine", 0);
-            int goldMineCount = countsByType.getOrDefault("gold_mine", 0);
-            int farmCount = countsByType.getOrDefault("farm", 0);
+            ResourcesRecord resources = loadResources(playerId);
+            int freeWorkers = Math.max(0, resources.population());
+
+            int lumberCount = allocateActiveBuildings(countsByType.getOrDefault("lumber", 0), 1, freeWorkers);
+            freeWorkers -= lumberCount;
+            int farmCount = allocateActiveBuildings(countsByType.getOrDefault("farm", 0), 2, freeWorkers);
+            freeWorkers -= farmCount * 2;
+            int mineCount = allocateActiveBuildings(countsByType.getOrDefault("mine", 0), 2, freeWorkers);
+            freeWorkers -= mineCount * 2;
+            int ironMineCount = allocateActiveBuildings(countsByType.getOrDefault("iron_mine", 0), 2, freeWorkers);
+            freeWorkers -= ironMineCount * 2;
+            int goldMineCount = allocateActiveBuildings(countsByType.getOrDefault("gold_mine", 0), 2, freeWorkers);
 
             int woodGain = calcHourlyGain(elapsedSeconds, lumberCount, 5);
             int stoneGain = calcHourlyGain(elapsedSeconds, mineCount, 3);
@@ -769,11 +914,11 @@ public class GameDao {
             jdbcTemplate.update(
                     """
                     UPDATE resources
-                    SET wood = wood + ?,
-                        stone = stone + ?,
-                        iron = iron + ?,
-                        gold = gold + ?,
-                        food = food + ?,
+                    SET wood = LEAST(storage_limit, wood + ?),
+                        stone = LEAST(storage_limit, stone + ?),
+                        iron = LEAST(storage_limit, iron + ?),
+                        gold = LEAST(storage_limit, gold + ?),
+                        food = LEAST(storage_limit, food + ?),
                         last_updated = NOW()
                     WHERE player_id = ?
                     """,
@@ -795,16 +940,32 @@ public class GameDao {
         return (int) Math.floor(amount);
     }
 
+    private int allocateActiveBuildings(int totalBuildings, int workersPerBuilding, int freeWorkers) {
+        if (totalBuildings <= 0 || workersPerBuilding <= 0 || freeWorkers <= 0) {
+            return 0;
+        }
+        return Math.min(totalBuildings, freeWorkers / workersPerBuilding);
+    }
+
     private String normalizeMapBuildingType(String buildingType) {
         if (buildingType == null) {
             return "";
         }
-        String value = buildingType.trim().toLowerCase();
+        String value = buildingType.trim().toLowerCase().replace('-', '_');
         if (value.equals("gold")) {
             return "gold_mine";
         }
         if (value.equals("iron") || value.equals("ironmine")) {
             return "iron_mine";
+        }
+        if (value.equals("capitol") || value.equals("capital") || value.equals("town_hall")) {
+            return "capitol";
+        }
+        if (value.equals("lumbermill")) {
+            return "lumber";
+        }
+        if (value.equals("storage") || value.equals("stock")) {
+            return "warehouse";
         }
         return value;
     }
@@ -2052,6 +2213,14 @@ public class GameDao {
             case "ALCOHOL" -> "alcohol";
             default -> throw new IllegalArgumentException("Unknown resource key: " + resourceKey);
         };
+    }
+
+    private boolean isStorageLimitedColumn(String column) {
+        return "wood".equals(column)
+                || "stone".equals(column)
+                || "food".equals(column)
+                || "iron".equals(column)
+                || "gold".equals(column);
     }
 
     private String nullableString(ResultSet rs, String column) {

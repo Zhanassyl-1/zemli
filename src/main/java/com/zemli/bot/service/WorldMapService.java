@@ -15,6 +15,7 @@ public class WorldMapService {
 
     private static final int MIN_CAPITAL_DISTANCE = 10;
     private static final int DEFAULT_VIEW_RADIUS = 3;
+    private static final int TOWER_BONUS_RADIUS = 10;
 
     private static final Map<Faction, GameDao.Point> SPAWNS = new EnumMap<>(Faction.class);
 
@@ -50,10 +51,11 @@ public class WorldMapService {
 
     public String renderMap(long playerId, int centerX, int centerY, int radius) {
         GameDao.Point capital = gameDao.loadCapital(playerId).orElse(new GameDao.Point(0, 0));
+        int viewRadius = viewRadiusFor(playerId);
         StringBuilder sb = new StringBuilder("🗺️ Карта ").append(centerX).append(",").append(centerY).append("\n");
         for (int y = centerY - radius; y <= centerY + radius; y++) {
             for (int x = centerX - radius; x <= centerX + radius; x++) {
-                boolean visible = chebyshevDistance(capital.x(), capital.y(), x, y) <= DEFAULT_VIEW_RADIUS;
+                boolean visible = chebyshevDistance(capital.x(), capital.y(), x, y) <= viewRadius;
                 if (!visible) {
                     sb.append("⬛");
                     continue;
@@ -71,6 +73,7 @@ public class WorldMapService {
 
     public List<MapCellDto> cellsInRadius(long requesterPlayerId, int centerX, int centerY, int radius) {
         GameDao.Point capital = gameDao.loadCapital(requesterPlayerId).orElse(new GameDao.Point(0, 0));
+        int viewRadius = viewRadiusFor(requesterPlayerId);
         Map<String, GameDao.CapitalPoint> capitals = new HashMap<>();
         for (GameDao.CapitalPoint c : gameDao.loadAllCapitalsWithOwners()) {
             capitals.put(c.x() + ":" + c.y(), c);
@@ -79,7 +82,7 @@ public class WorldMapService {
         List<MapCellDto> cells = new java.util.ArrayList<>();
         for (int y = centerY - radius; y <= centerY + radius; y++) {
             for (int x = centerX - radius; x <= centerX + radius; x++) {
-                boolean visible = chebyshevDistance(capital.x(), capital.y(), x, y) <= DEFAULT_VIEW_RADIUS;
+                boolean visible = chebyshevDistance(capital.x(), capital.y(), x, y) <= viewRadius;
                 if (!visible) {
                     cells.add(new MapCellDto(x, y, "fog", null, null, null));
                     continue;
@@ -93,6 +96,12 @@ public class WorldMapService {
             }
         }
         return cells;
+    }
+
+    private int viewRadiusFor(long playerId) {
+        Map<String, Integer> counts = gameDao.loadMapBuildingCounts(playerId);
+        int towers = counts.getOrDefault("tower", 0);
+        return DEFAULT_VIEW_RADIUS + (towers * TOWER_BONUS_RADIUS);
     }
 
     public boolean canBuild(long playerId, int x, int y) {

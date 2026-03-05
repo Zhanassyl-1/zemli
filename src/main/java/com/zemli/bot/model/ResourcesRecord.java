@@ -7,6 +7,9 @@ public record ResourcesRecord(
         int iron,
         int gold,
         int mana,
-        int alcohol
+        int alcohol,
+        int population,
+        int maxPopulation,
+        int storageLimit
 ) {
 }

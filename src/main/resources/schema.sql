@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS resources (
     gold INTEGER NOT NULL DEFAULT 0 CHECK (gold >= 0),
     mana INTEGER NOT NULL DEFAULT 0 CHECK (mana >= 0),
     alcohol INTEGER NOT NULL DEFAULT 0 CHECK (alcohol >= 0),
+    population INTEGER NOT NULL DEFAULT 10 CHECK (population >= 0),
+    max_population INTEGER NOT NULL DEFAULT 10 CHECK (max_population >= 1),
+    storage_limit INTEGER NOT NULL DEFAULT 1000 CHECK (storage_limit >= 1),
     last_updated TIMESTAMP NOT NULL DEFAULT NOW()
 );
 

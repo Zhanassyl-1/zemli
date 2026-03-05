@@ -142,6 +142,9 @@ public class TelegramBotConfig {
                         .commands(List.of(
                                 new BotCommand("/start", "🚀 Начать игру"),
                                 new BotCommand("/map", "🗺️ Показать карту"),
+                                new BotCommand("/shop", "🛒 Магазин ресурсов"),
+                                new BotCommand("/sell", "💱 Продажа ресурсов"),
+                                new BotCommand("/stats", "📊 Статистика королевства"),
                                 new BotCommand("/legend", "📘 Легенда карты"),
                                 new BotCommand("/help", "📋 Помощь"),
                                 new BotCommand("/getid", "🆔 Показать ID"),
