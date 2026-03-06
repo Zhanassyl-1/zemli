@@ -35,6 +35,25 @@ body {
   cursor: grabbing;
 }
 
+.resources-panel {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  z-index: 1200;
+  border: 1px solid #444;
+  backdrop-filter: blur(5px);
+}
+
+.resource-item {
+  display: inline-block;
+  margin-right: 15px;
+}
+
 .hud {
   position: fixed;
   top: 10px;
@@ -262,10 +281,22 @@ body {
 }
 
 @media (max-width: 900px) {
+  .resources-panel {
+    top: 6px;
+    left: 6px;
+    right: 6px;
+    font-size: 12px;
+    padding: 8px;
+  }
+
+  .resource-item {
+    margin-right: 10px;
+  }
+
   .hud {
     min-width: 0;
     width: calc(100vw - 16px);
-    top: 6px;
+    top: 62px;
     padding: 6px 8px;
   }
 

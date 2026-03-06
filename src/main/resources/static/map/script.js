@@ -83,7 +83,6 @@ let inventory = {};
 let gameResources = null;
 let loadedUnits = [];
 let enemyMarkers = [];
-let resourceNodes = [];
 let dirty = true;
 let lastCameraX = cameraX;
 let lastCameraY = cameraY;
@@ -109,9 +108,26 @@ const buildingEmojiMap = {
   wall: "🧱",
   tower: "🗼",
   gold: "💰",
+  gold_mine: "💰",
   stable: "🐎",
   library: "📚",
   tavern: "🍺"
+};
+
+const RESOURCE_ICONS = {
+  wood: "🪵",
+  stone: "🪨",
+  iron: "⚔️",
+  gold: "💰",
+  food: "🌾"
+};
+
+const REQUIRED_RESOURCE_BY_BUILDING = {
+  lumber: "wood",
+  mine: "stone",
+  iron_mine: "iron",
+  gold: "gold",
+  gold_mine: "gold"
 };
 
 const unitEmojiMap = {
@@ -298,23 +314,7 @@ function generateBiomeMap() {
 }
 
 function generateResourceNodes() {
-  console.log("📦 Генерация ресурсов...");
-  resourceNodes = [];
-  for (let y = 0; y < MAP_HEIGHT; y += 2) {
-    for (let x = 0; x < MAP_WIDTH; x += 2) {
-      const biome = biomeMap[idx(x, y)];
-      const relX = x - CENTER_X;
-      const relY = y - CENTER_Y;
-      const h = Math.abs((relX * 73856093) ^ (relY * 19349663));
-      let icon = null;
-      if (biome === BIOME.FOREST && h % 9 === 0) icon = "🪵";
-      else if (biome === BIOME.MOUNTAIN && h % 11 === 0) icon = "⛏️";
-      else if (biome === BIOME.PLAINS && h % 13 === 0) icon = "🌾";
-      else if (biome === BIOME.DESERT && h % 27 === 0) icon = "💰";
-      if (icon) resourceNodes.push({ x: relX, y: relY, icon });
-    }
-  }
-  console.log("✅ Ресурсы сгенерированы:", resourceNodes.length);
+  console.log("✅ Ресурсы будут генерироваться динамически по клеткам");
 }
 
 function requestRender() {
@@ -355,16 +355,95 @@ function biomeName(code) {
 }
 
 function normalizeType(raw) {
-  return (raw || "").toLowerCase().trim();
+  const t = (raw || "").toLowerCase().trim();
+  if (t === "gold_mine") return "gold";
+  return t;
 }
 
-function resourceAt(relX, relY) {
-  const h = Math.abs((relX * 73856093) ^ (relY * 19349663));
-  if (h % 67 === 0) return "🪵";
-  if (h % 71 === 0) return "⛏️";
-  if (h % 79 === 0) return "🌾";
-  if (h % 97 === 0) return "💰";
+function getBiome(relX, relY) {
+  const wx = relX + CENTER_X;
+  const wy = relY + CENTER_Y;
+  if (wx < 0 || wy < 0 || wx >= MAP_WIDTH || wy >= MAP_HEIGHT) return null;
+  return biomeMap[idx(wx, wy)];
+}
+
+function resourceRandom(relX, relY, seed) {
+  const wx = relX + CENTER_X;
+  const wy = relY + CENTER_Y;
+  return hash2(wx, wy, seed);
+}
+
+function getResourceTypeAt(relX, relY) {
+  const biome = getBiome(relX, relY);
+  if (biome === null || biome === BIOME.OCEAN || biome === BIOME.SHALLOW) return null;
+
+  if (biome === BIOME.FOREST) {
+    return resourceRandom(relX, relY, 901) < 0.40 ? "wood" : null;
+  }
+
+  if (biome === BIOME.MOUNTAIN) {
+    const r = resourceRandom(relX, relY, 902);
+    if (r < 0.15) return "iron";
+    if (r < 0.45) return "stone";
+    return null;
+  }
+
+  if (biome === BIOME.DESERT) {
+    return resourceRandom(relX, relY, 903) < 0.08 ? "gold" : null;
+  }
+
+  if (biome === BIOME.PLAINS || biome === BIOME.JUNGLE) {
+    return resourceRandom(relX, relY, 904) < 0.10 ? "food" : null;
+  }
+
   return null;
+}
+
+function getResourcesInRadius(relX, relY, radius) {
+  const result = [];
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const x = relX + dx;
+      const y = relY + dy;
+      const type = getResourceTypeAt(x, y);
+      if (type) result.push({ x, y, type });
+    }
+  }
+  return result;
+}
+
+function canBuildHere(relX, relY, type) {
+  const normalizedType = normalizeType(type);
+  const nearbyResources = getResourcesInRadius(relX, relY, 1);
+
+  switch (normalizedType) {
+    case "lumber":
+      return nearbyResources.some((r) => r.type === "wood");
+    case "mine":
+      return nearbyResources.some((r) => r.type === "stone");
+    case "iron_mine":
+      return nearbyResources.some((r) => r.type === "iron");
+    case "gold":
+      return nearbyResources.some((r) => r.type === "gold");
+    case "farm": {
+      const biome = getBiome(relX, relY);
+      return biome === BIOME.PLAINS || biome === BIOME.FOREST;
+    }
+    default:
+      return true;
+  }
+}
+
+function getRequiredResourceIcon(relX, relY, type) {
+  const normalizedType = normalizeType(type);
+  const resourceType = REQUIRED_RESOURCE_BY_BUILDING[normalizedType];
+  if (!resourceType) return null;
+  const nearbyResources = getResourcesInRadius(relX, relY, 1);
+  const found = nearbyResources.some((r) => r.type === resourceType);
+  return {
+    icon: RESOURCE_ICONS[resourceType] || "❔",
+    ok: found
+  };
 }
 
 function generateEnemyMarkers() {
@@ -451,6 +530,17 @@ function normalizeInventoryPayload(rawInventory) {
   return result;
 }
 
+function updateResourcesUI(res) {
+  const safe = res || {};
+  document.getElementById("wood").textContent = Number(safe.wood || 0);
+  document.getElementById("stone").textContent = Number(safe.stone || 0);
+  document.getElementById("iron").textContent = Number(safe.iron || 0);
+  document.getElementById("gold").textContent = Number(safe.gold || 0);
+  document.getElementById("food").textContent = Number(safe.food || 0);
+  document.getElementById("population").textContent = Number(safe.population || 0);
+  document.getElementById("maxPop").textContent = Number(safe.maxPopulation || 0);
+}
+
 async function loadGame() {
   if (!playerId) return;
 
@@ -468,6 +558,7 @@ async function loadGame() {
     window.buildings = loadedBuildings;
     window.inventory = inventory;
     window.resources = gameResources;
+    updateResourcesUI(gameResources);
     ensureStartingHome();
     if (mapCanvas) {
       centerOnRelative(playerHome.x, playerHome.y);
@@ -718,7 +809,8 @@ function checkCanPlace(relX, relY, type) {
   if (wx < 0 || wy < 0 || wx >= MAP_WIDTH || wy >= MAP_HEIGHT) return false;
   const biome = biomeMap[idx(wx, wy)];
   if (biome === BIOME.OCEAN || biome === BIOME.SHALLOW) return false;
-  return !!type;
+  if (!type) return false;
+  return canBuildHere(relX, relY, type);
 }
 
 function drawHover(ctx) {
@@ -733,9 +825,15 @@ function drawHover(ctx) {
   ctx.fillStyle = "#ffffff";
   ctx.font = '12px "Courier New"';
   ctx.fillText(getPrice(selectedBuilding), x, y - 6);
+  const required = getRequiredResourceIcon(hoverX, hoverY, selectedBuilding);
+  if (required) {
+    ctx.font = `${Math.max(14, tile * 0.5)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    ctx.fillText(required.icon, x + tile + 10, y + 12);
+  }
 }
 
 async function onMapClick(relX, relY) {
+  updateResourcesUI(gameResources);
   if (!isVisible(relX, relY)) {
     console.log("🚫 Клетка вне обзора:", relX, relY);
     return;
@@ -769,6 +867,7 @@ async function onMapClick(relX, relY) {
         selectedBuilding = null;
       }
       renderInventoryPanel();
+      updateResourcesUI(gameResources);
       requestRender();
     }
     return;
@@ -780,6 +879,7 @@ async function onMapClick(relX, relY) {
     console.log(`🚚 Переместить в (${relX}, ${relY})`);
     if (selectedUnitType && armyOrderMode === "recruit") {
       addUnit(selectedUnitType, relX, relY);
+      await loadGameState();
       requestRender();
       return;
     }
@@ -787,6 +887,7 @@ async function onMapClick(relX, relY) {
       const unit = pickNearestUnit(relX, relY);
       if (unit) {
         await moveUnit(unit.id, relX, relY);
+        await loadGameState();
         requestRender();
       }
     }
@@ -795,6 +896,7 @@ async function onMapClick(relX, relY) {
 
   if (actionMode === "attack") {
     await attack(relX, relY);
+    await loadGameState();
   }
 }
 
@@ -931,16 +1033,52 @@ function drawMap(ctx, canvas) {
 }
 
 function drawResourceMarkers(ctx, view) {
-  const { tile } = view;
+  const { tile, startCol, startRow, endCol, endRow } = view;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `${Math.max(11, tile * 0.45)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
 
-  for (const node of resourceNodes) {
-    if (!isVisible(node.x, node.y)) continue;
-    const pos = worldToScreen(node.x, node.y);
-    if (pos.x + tile < -40 || pos.y + tile < -40 || pos.x > mapCanvas.width + 40 || pos.y > mapCanvas.height + 40) continue;
-    ctx.fillText(node.icon, pos.x + tile / 2, pos.y + tile / 2);
+  for (let row = startRow; row < endRow; row++) {
+    for (let col = startCol; col < endCol; col++) {
+      const relX = col - CENTER_X;
+      const relY = row - CENTER_Y;
+      if (!isVisible(relX, relY)) continue;
+      const resourceType = getResourceTypeAt(relX, relY);
+      if (!resourceType) continue;
+      const icon = RESOURCE_ICONS[resourceType];
+      if (!icon) continue;
+      const x = (col * tile) - cameraX;
+      const y = (row * tile) - cameraY;
+      ctx.fillText(icon, x + tile / 2, y + tile / 2);
+    }
+  }
+}
+
+function drawBuildHints(ctx, view) {
+  if (!selectedBuilding) return;
+  const { tile, startCol, startRow, endCol, endRow } = view;
+  ctx.lineWidth = Math.max(1, tile * 0.08);
+
+  for (let row = startRow; row < endRow; row++) {
+    for (let col = startCol; col < endCol; col++) {
+      const relX = col - CENTER_X;
+      const relY = row - CENTER_Y;
+      if (!isVisible(relX, relY)) continue;
+      const canPlace = checkCanPlace(relX, relY, selectedBuilding);
+      const x = (col * tile) - cameraX;
+      const y = (row * tile) - cameraY;
+      ctx.strokeStyle = canPlace ? "rgba(70, 220, 90, 0.55)" : "rgba(240, 60, 60, 0.45)";
+      ctx.strokeRect(x + 1, y + 1, tile - 2, tile - 2);
+
+      const required = getRequiredResourceIcon(relX, relY, selectedBuilding);
+      if (required) {
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.font = `${Math.max(9, tile * 0.3)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+        ctx.fillStyle = required.ok ? "#d5ffd5" : "#ffd5d5";
+        ctx.fillText(required.icon, x + 2, y + 2);
+      }
+    }
   }
 }
 
@@ -1030,6 +1168,7 @@ function render() {
   drawBuildings(mapCtx, view);
   drawUnits(mapCtx, view);
   drawEnemies(mapCtx, view);
+  drawBuildHints(mapCtx, view);
   drawHover(mapCtx);
   dirty = false;
   needsRedraw = false;
