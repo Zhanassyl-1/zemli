@@ -92,6 +92,7 @@ let hoverX = null;
 let hoverY = null;
 
 const VIEW_RADIUS = 15;
+const TOWER_VIEW_RADIUS = 10;
 const FOG_COLOR = "#0f1720";
 const playerHome = { x: 0, y: 0 };
 let viewCircles = [{ x: 0, y: 0, radius: VIEW_RADIUS }];
@@ -115,10 +116,10 @@ const buildingEmojiMap = {
 };
 
 const RESOURCE_ICONS = {
-  wood: "🪵",
-  stone: "🪨",
-  iron: "⚔️",
-  gold: "💰",
+  wood: "🌲",
+  stone: "⛰️",
+  iron: "⚙️",
+  gold: "💎",
   food: "🌾"
 };
 
@@ -326,7 +327,7 @@ function rebuildViewCircles() {
   viewCircles = [{ x: playerHome.x, y: playerHome.y, radius: VIEW_RADIUS }];
   const towers = (window.buildings || loadedBuildings || []).filter((b) => normalizeType(b.type) === "tower");
   for (const t of towers) {
-    viewCircles.push({ x: Number(t.x || 0), y: Number(t.y || 0), radius: 8 });
+    viewCircles.push({ x: Number(t.x || 0), y: Number(t.y || 0), radius: TOWER_VIEW_RADIUS });
   }
   console.log("👁️ Круги обзора:", viewCircles.length);
 }
@@ -378,13 +379,13 @@ function getResourceTypeAt(relX, relY) {
   if (biome === null || biome === BIOME.OCEAN || biome === BIOME.SHALLOW) return null;
 
   if (biome === BIOME.FOREST) {
-    return resourceRandom(relX, relY, 901) < 0.40 ? "wood" : null;
+    return resourceRandom(relX, relY, 901) < 0.10 ? "wood" : null;
   }
 
   if (biome === BIOME.MOUNTAIN) {
     const r = resourceRandom(relX, relY, 902);
-    if (r < 0.15) return "iron";
-    if (r < 0.45) return "stone";
+    if (r < 0.10) return "iron";
+    if (r < 0.40) return "stone";
     return null;
   }
 
@@ -444,6 +445,17 @@ function getRequiredResourceIcon(relX, relY, type) {
     icon: RESOURCE_ICONS[resourceType] || "❔",
     ok: found
   };
+}
+
+function resourceLabel(resourceType) {
+  switch (resourceType) {
+    case "wood": return `${RESOURCE_ICONS.wood} Дерево`;
+    case "stone": return `${RESOURCE_ICONS.stone} Камень`;
+    case "iron": return `${RESOURCE_ICONS.iron} Железо`;
+    case "gold": return `${RESOURCE_ICONS.gold} Золото`;
+    case "food": return `${RESOURCE_ICONS.food} Еда`;
+    default: return "—";
+  }
 }
 
 function generateEnemyMarkers() {
@@ -790,13 +802,26 @@ const buildingPriceMap = {
   mine: "150🪨",
   iron_mine: "200⚔️+100🪨",
   farm: "50🌾+50🪵",
-  tower: "200🪵+150🪨",
   warehouse: "300🪵+200🪨",
   house: "100🪵+50🪨",
   barracks: "400🪵+300⚔️"
 };
 
+function getNextTowerCost() {
+  const towersCount = (window.buildings || loadedBuildings || [])
+    .filter((b) => normalizeType(b.type) === "tower").length;
+  const multiplier = Math.pow(1.5, towersCount);
+  return {
+    wood: Math.round(100 * multiplier),
+    stone: Math.round(50 * multiplier)
+  };
+}
+
 function getPrice(type) {
+  if (normalizeType(type) === "tower") {
+    const towerCost = getNextTowerCost();
+    return `${towerCost.wood}🪵+${towerCost.stone}🪨`;
+  }
   return buildingPriceMap[normalizeType(type)] || "—";
 }
 
@@ -916,9 +941,11 @@ function handleMouseMove(e) {
   const wy = rel.y + CENTER_Y;
   const inside = wx >= 0 && wy >= 0 && wx < MAP_WIDTH && wy < MAP_HEIGHT;
   const b = inside ? biomeMap[idx(wx, wy)] : BIOME.OCEAN;
+  const hoveredResourceType = inside ? getResourceTypeAt(rel.x, rel.y) : null;
 
   document.getElementById("coords").textContent = `X: ${rel.x}, Y: ${rel.y}`;
   document.getElementById("biomeInfo").textContent = biomeName(b);
+  document.getElementById("resourceInfo").textContent = `Ресурс: ${resourceLabel(hoveredResourceType)}`;
   hoverX = rel.x;
   hoverY = rel.y;
   if (selectedBuilding) requestRender();
