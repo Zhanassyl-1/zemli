@@ -81,6 +81,7 @@ let armyOrderMode = "recruit"; // recruit | move
 let loadedBuildings = [];
 let inventory = {};
 let gameResources = null;
+let simulatedResources = null;
 let loadedUnits = [];
 let enemyMarkers = [];
 let dirty = true;
@@ -90,6 +91,7 @@ let lastScale = scale;
 let needsRedraw = true;
 let hoverX = null;
 let hoverY = null;
+let ironTickAccumulator = 0;
 
 const VIEW_RADIUS = 15;
 const TOWER_VIEW_RADIUS = 10;
@@ -119,8 +121,7 @@ const RESOURCE_ICONS = {
   wood: "🌲",
   stone: "⛰️",
   iron: "⚙️",
-  gold: "💎",
-  food: "🌾"
+  gold: "💎"
 };
 
 const REQUIRED_RESOURCE_BY_BUILDING = {
@@ -129,6 +130,20 @@ const REQUIRED_RESOURCE_BY_BUILDING = {
   iron_mine: "iron",
   gold: "gold",
   gold_mine: "gold"
+};
+
+const BUILDING_LABELS = {
+  capitol: "Ратуша",
+  lumber: "Лесопилка",
+  mine: "Шахта (камень)",
+  iron_mine: "Железная шахта",
+  farm: "Ферма",
+  barracks: "Казарма",
+  warehouse: "Склад",
+  house: "Дом",
+  wall: "Стена",
+  tower: "Вышка",
+  gold: "Золотая шахта"
 };
 
 const unitEmojiMap = {
@@ -393,10 +408,6 @@ function getResourceTypeAt(relX, relY) {
     return resourceRandom(relX, relY, 903) < 0.08 ? "gold" : null;
   }
 
-  if (biome === BIOME.PLAINS || biome === BIOME.JUNGLE) {
-    return resourceRandom(relX, relY, 904) < 0.10 ? "food" : null;
-  }
-
   return null;
 }
 
@@ -453,7 +464,6 @@ function resourceLabel(resourceType) {
     case "stone": return `${RESOURCE_ICONS.stone} Камень`;
     case "iron": return `${RESOURCE_ICONS.iron} Железо`;
     case "gold": return `${RESOURCE_ICONS.gold} Золото`;
-    case "food": return `${RESOURCE_ICONS.food} Еда`;
     default: return "—";
   }
 }
@@ -548,9 +558,78 @@ function updateResourcesUI(res) {
   document.getElementById("stone").textContent = Number(safe.stone || 0);
   document.getElementById("iron").textContent = Number(safe.iron || 0);
   document.getElementById("gold").textContent = Number(safe.gold || 0);
-  document.getElementById("food").textContent = Number(safe.food || 0);
   document.getElementById("population").textContent = Number(safe.population || 0);
   document.getElementById("maxPop").textContent = Number(safe.maxPopulation || 0);
+}
+
+function cloneResourceState(res) {
+  const safe = res || {};
+  return {
+    wood: Number(safe.wood || 0),
+    stone: Number(safe.stone || 0),
+    iron: Number(safe.iron || 0),
+    gold: Number(safe.gold || 0),
+    population: Number(safe.population || 0),
+    maxPopulation: Number(safe.maxPopulation || 0)
+  };
+}
+
+function mergeServerResourceState(serverRes) {
+  const incoming = cloneResourceState(serverRes);
+  if (!simulatedResources) {
+    simulatedResources = incoming;
+  } else {
+    simulatedResources.wood = Math.max(simulatedResources.wood, incoming.wood);
+    simulatedResources.stone = Math.max(simulatedResources.stone, incoming.stone);
+    simulatedResources.iron = Math.max(simulatedResources.iron, incoming.iron);
+    simulatedResources.gold = Math.max(simulatedResources.gold, incoming.gold);
+    simulatedResources.population = incoming.population;
+    simulatedResources.maxPopulation = incoming.maxPopulation;
+  }
+  gameResources = simulatedResources;
+  window.resources = simulatedResources;
+  updateResourcesUI(simulatedResources);
+}
+
+function countBuildingsByType(type) {
+  const normalized = normalizeType(type);
+  return (window.buildings || loadedBuildings || []).filter((b) => normalizeType(b.type) === normalized).length;
+}
+
+function productionPerMinute(type) {
+  const normalized = normalizeType(type);
+  if (normalized === "lumber") return 12;
+  if (normalized === "mine") return 12;
+  if (normalized === "iron_mine") return 6;
+  return 0;
+}
+
+function formatBuildingInfo(building) {
+  if (!building) return "Здание: —";
+  const normalizedType = normalizeType(building.type);
+  const label = BUILDING_LABELS[normalizedType] || normalizedType || "Неизвестно";
+  const perMinute = productionPerMinute(normalizedType);
+  const level = Number(building.level || 1);
+  return `Здание: ${label} | Добыча: ${perMinute}/мин | Ур.: ${level}`;
+}
+
+function findBuildingAt(relX, relY) {
+  return (window.buildings || loadedBuildings || [])
+    .find((b) => Number(b.x) === relX && Number(b.y) === relY) || null;
+}
+
+function tickResourceProduction() {
+  if (!simulatedResources) return;
+  simulatedResources.wood += countBuildingsByType("lumber");
+  simulatedResources.stone += countBuildingsByType("mine");
+  ironTickAccumulator += 5;
+  if (ironTickAccumulator >= 10) {
+    simulatedResources.iron += countBuildingsByType("iron_mine");
+    ironTickAccumulator = 0;
+  }
+  gameResources = simulatedResources;
+  window.resources = simulatedResources;
+  updateResourcesUI(simulatedResources);
 }
 
 async function loadGame() {
@@ -566,11 +645,9 @@ async function loadGame() {
     console.log("📦 Загружено:", data);
     loadedBuildings = Array.isArray(data.buildings) ? data.buildings : [];
     inventory = normalizeInventoryPayload(data.inventory || {});
-    gameResources = data.resources || null;
+    mergeServerResourceState(data.resources || null);
     window.buildings = loadedBuildings;
     window.inventory = inventory;
-    window.resources = gameResources;
-    updateResourcesUI(gameResources);
     ensureStartingHome();
     if (mapCanvas) {
       centerOnRelative(playerHome.x, playerHome.y);
@@ -942,10 +1019,12 @@ function handleMouseMove(e) {
   const inside = wx >= 0 && wy >= 0 && wx < MAP_WIDTH && wy < MAP_HEIGHT;
   const b = inside ? biomeMap[idx(wx, wy)] : BIOME.OCEAN;
   const hoveredResourceType = inside ? getResourceTypeAt(rel.x, rel.y) : null;
+  const hoveredBuilding = inside ? findBuildingAt(rel.x, rel.y) : null;
 
   document.getElementById("coords").textContent = `X: ${rel.x}, Y: ${rel.y}`;
   document.getElementById("biomeInfo").textContent = biomeName(b);
   document.getElementById("resourceInfo").textContent = `Ресурс: ${resourceLabel(hoveredResourceType)}`;
+  document.getElementById("buildingInfo").textContent = formatBuildingInfo(hoveredBuilding);
   hoverX = rel.x;
   hoverY = rel.y;
   if (selectedBuilding) requestRender();
@@ -1250,6 +1329,7 @@ async function bootstrap() {
   });
 
   await loadGameState();
+  setInterval(tickResourceProduction, 5000);
   setInterval(loadGameState, 5000);
   renderInventoryPanel();
   requestRender();
