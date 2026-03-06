@@ -81,7 +81,6 @@ let armyOrderMode = "recruit"; // recruit | move
 let loadedBuildings = [];
 let inventory = {};
 let gameResources = null;
-let simulatedResources = null;
 let loadedUnits = [];
 let enemyMarkers = [];
 let dirty = true;
@@ -91,7 +90,6 @@ let lastScale = scale;
 let needsRedraw = true;
 let hoverX = null;
 let hoverY = null;
-let ironTickAccumulator = 0;
 
 const VIEW_RADIUS = 15;
 const TOWER_VIEW_RADIUS = 10;
@@ -122,14 +120,6 @@ const RESOURCE_ICONS = {
   stone: "⛰️",
   iron: "⚙️",
   gold: "💎"
-};
-
-const REQUIRED_RESOURCE_BY_BUILDING = {
-  lumber: "wood",
-  mine: "stone",
-  iron_mine: "iron",
-  gold: "gold",
-  gold_mine: "gold"
 };
 
 const BUILDING_LABELS = {
@@ -446,18 +436,6 @@ function canBuildHere(relX, relY, type) {
   }
 }
 
-function getRequiredResourceIcon(relX, relY, type) {
-  const normalizedType = normalizeType(type);
-  const resourceType = REQUIRED_RESOURCE_BY_BUILDING[normalizedType];
-  if (!resourceType) return null;
-  const nearbyResources = getResourcesInRadius(relX, relY, 1);
-  const found = nearbyResources.some((r) => r.type === resourceType);
-  return {
-    icon: RESOURCE_ICONS[resourceType] || "❔",
-    ok: found
-  };
-}
-
 function resourceLabel(resourceType) {
   switch (resourceType) {
     case "wood": return `${RESOURCE_ICONS.wood} Дерево`;
@@ -562,38 +540,29 @@ function updateResourcesUI(res) {
   document.getElementById("maxPop").textContent = Number(safe.maxPopulation || 0);
 }
 
-function cloneResourceState(res) {
-  const safe = res || {};
-  return {
-    wood: Number(safe.wood || 0),
-    stone: Number(safe.stone || 0),
-    iron: Number(safe.iron || 0),
-    gold: Number(safe.gold || 0),
-    population: Number(safe.population || 0),
-    maxPopulation: Number(safe.maxPopulation || 0)
-  };
-}
-
-function mergeServerResourceState(serverRes) {
-  const incoming = cloneResourceState(serverRes);
-  if (!simulatedResources) {
-    simulatedResources = incoming;
-  } else {
-    simulatedResources.wood = Math.max(simulatedResources.wood, incoming.wood);
-    simulatedResources.stone = Math.max(simulatedResources.stone, incoming.stone);
-    simulatedResources.iron = Math.max(simulatedResources.iron, incoming.iron);
-    simulatedResources.gold = Math.max(simulatedResources.gold, incoming.gold);
-    simulatedResources.population = incoming.population;
-    simulatedResources.maxPopulation = incoming.maxPopulation;
+async function refreshResources() {
+  if (!ACTIVE_PLAYER_ID) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/resources?playerId=${ACTIVE_PLAYER_ID}`);
+    if (!res.ok) {
+      console.warn("Resources load failed", res.status);
+      return;
+    }
+    const data = await res.json();
+    const prev = gameResources || {};
+    gameResources = {
+      wood: Number(data.wood || 0),
+      stone: Number(data.stone || 0),
+      iron: Number(data.iron || 0),
+      gold: Number(data.gold || 0),
+      population: Number(prev.population || 0),
+      maxPopulation: Number(prev.maxPopulation || 0)
+    };
+    window.resources = gameResources;
+    updateResourcesUI(gameResources);
+  } catch (e) {
+    console.warn("Resources refresh failed", e);
   }
-  gameResources = simulatedResources;
-  window.resources = simulatedResources;
-  updateResourcesUI(simulatedResources);
-}
-
-function countBuildingsByType(type) {
-  const normalized = normalizeType(type);
-  return (window.buildings || loadedBuildings || []).filter((b) => normalizeType(b.type) === normalized).length;
 }
 
 function productionPerMinute(type) {
@@ -618,20 +587,6 @@ function findBuildingAt(relX, relY) {
     .find((b) => Number(b.x) === relX && Number(b.y) === relY) || null;
 }
 
-function tickResourceProduction() {
-  if (!simulatedResources) return;
-  simulatedResources.wood += countBuildingsByType("lumber");
-  simulatedResources.stone += countBuildingsByType("mine");
-  ironTickAccumulator += 5;
-  if (ironTickAccumulator >= 10) {
-    simulatedResources.iron += countBuildingsByType("iron_mine");
-    ironTickAccumulator = 0;
-  }
-  gameResources = simulatedResources;
-  window.resources = simulatedResources;
-  updateResourcesUI(simulatedResources);
-}
-
 async function loadGame() {
   if (!playerId) return;
 
@@ -645,9 +600,12 @@ async function loadGame() {
     console.log("📦 Загружено:", data);
     loadedBuildings = Array.isArray(data.buildings) ? data.buildings : [];
     inventory = normalizeInventoryPayload(data.inventory || {});
-    mergeServerResourceState(data.resources || null);
+    gameResources = data.resources || gameResources || null;
     window.buildings = loadedBuildings;
     window.inventory = inventory;
+    window.resources = gameResources;
+    updateResourcesUI(gameResources);
+    await refreshResources();
     ensureStartingHome();
     if (mapCanvas) {
       centerOnRelative(playerHome.x, playerHome.y);
@@ -924,18 +882,14 @@ function drawHover(ctx) {
   ctx.strokeStyle = canPlace ? "#00ff00" : "#ff0000";
   ctx.lineWidth = 3;
   ctx.strokeRect(x, y, tile, tile);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = '12px "Courier New"';
-  ctx.fillText(getPrice(selectedBuilding), x, y - 6);
-  const required = getRequiredResourceIcon(hoverX, hoverY, selectedBuilding);
-  if (required) {
-    ctx.font = `${Math.max(14, tile * 0.5)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-    ctx.fillText(required.icon, x + tile + 10, y + 12);
+  if (canPlace) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = '12px Arial';
+    ctx.fillText(getPrice(selectedBuilding), x + 5, y - 5);
   }
 }
 
 async function onMapClick(relX, relY) {
-  updateResourcesUI(gameResources);
   if (!isVisible(relX, relY)) {
     console.log("🚫 Клетка вне обзора:", relX, relY);
     return;
@@ -969,7 +923,7 @@ async function onMapClick(relX, relY) {
         selectedBuilding = null;
       }
       renderInventoryPanel();
-      updateResourcesUI(gameResources);
+      await refreshResources();
       requestRender();
     }
     return;
@@ -982,6 +936,7 @@ async function onMapClick(relX, relY) {
     if (selectedUnitType && armyOrderMode === "recruit") {
       addUnit(selectedUnitType, relX, relY);
       await loadGameState();
+      await refreshResources();
       requestRender();
       return;
     }
@@ -990,6 +945,7 @@ async function onMapClick(relX, relY) {
       if (unit) {
         await moveUnit(unit.id, relX, relY);
         await loadGameState();
+        await refreshResources();
         requestRender();
       }
     }
@@ -999,6 +955,7 @@ async function onMapClick(relX, relY) {
   if (actionMode === "attack") {
     await attack(relX, relY);
     await loadGameState();
+    await refreshResources();
   }
 }
 
@@ -1160,34 +1117,6 @@ function drawResourceMarkers(ctx, view) {
   }
 }
 
-function drawBuildHints(ctx, view) {
-  if (!selectedBuilding) return;
-  const { tile, startCol, startRow, endCol, endRow } = view;
-  ctx.lineWidth = Math.max(1, tile * 0.08);
-
-  for (let row = startRow; row < endRow; row++) {
-    for (let col = startCol; col < endCol; col++) {
-      const relX = col - CENTER_X;
-      const relY = row - CENTER_Y;
-      if (!isVisible(relX, relY)) continue;
-      const canPlace = checkCanPlace(relX, relY, selectedBuilding);
-      const x = (col * tile) - cameraX;
-      const y = (row * tile) - cameraY;
-      ctx.strokeStyle = canPlace ? "rgba(70, 220, 90, 0.55)" : "rgba(240, 60, 60, 0.45)";
-      ctx.strokeRect(x + 1, y + 1, tile - 2, tile - 2);
-
-      const required = getRequiredResourceIcon(relX, relY, selectedBuilding);
-      if (required) {
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        ctx.font = `${Math.max(9, tile * 0.3)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-        ctx.fillStyle = required.ok ? "#d5ffd5" : "#ffd5d5";
-        ctx.fillText(required.icon, x + 2, y + 2);
-      }
-    }
-  }
-}
-
 function drawBuildings(ctx, view) {
   if (Array.isArray(ctx)) {
     loadedBuildings = ctx;
@@ -1274,7 +1203,6 @@ function render() {
   drawBuildings(mapCtx, view);
   drawUnits(mapCtx, view);
   drawEnemies(mapCtx, view);
-  drawBuildHints(mapCtx, view);
   drawHover(mapCtx);
   dirty = false;
   needsRedraw = false;
@@ -1329,7 +1257,7 @@ async function bootstrap() {
   });
 
   await loadGameState();
-  setInterval(tickResourceProduction, 5000);
+  setInterval(refreshResources, 5000);
   setInterval(loadGameState, 5000);
   renderInventoryPanel();
   requestRender();
