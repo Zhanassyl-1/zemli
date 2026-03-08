@@ -97,7 +97,7 @@ let hoverY = null;
 const textureManager = {
   loaded: false,
   images: {},
-  loaders: [],
+  missing: new Set(),
   get(key) {
     return this.images[key] || null;
   }
@@ -105,31 +105,32 @@ const textureManager = {
 
 const TEXTURES = {
   biome: {
-    grass: ["/images/grass.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_grass_plain_green_flat_no_flowers_no_trees_just_grass_-0.jpg"],
-    water: ["/images/water.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_water_terrain_blue_waves_ocean_sea_no_land_isometric_g-0.jpg"],
-    mountain: ["/images/mountain.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_mountain_terrain_rocky_peaks_grey_stone_snow_caps_no_b-0.jpg"],
-    desert: ["/images/desert.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_plains_terrain_green_grass_open_field_no_trees_isometr-0.jpg"],
-    swamp: ["/images/swamp.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_forest_terrain_dense_trees_green_canopy_no_buildings_i-0.jpg"],
-    hills: ["/images/hills.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_rocky_ground_grey_stones_scattered_no_grass_just_rocks-0.jpg"]
+    grass: "/images/grass.png",
+    water: "/images/water.png",
+    mountain: "/images/mountain.png",
+    desert: "/images/desert.png",
+    swamp: "/images/swamp.png",
+    hills: "/images/hills.png",
+    plains: "/images/plains.png",
+    beach: "/images/beach.png"
   },
   buildings: {
-    town_hall_2x2: ["/images/town_hall_2x2.png", "/images/lucid-origin_tiny_pixel_art_icon_32x32_town_hall_medieval_stone_building_red_roof_flag_isomet-0.jpg"],
-    farm: ["/images/farm.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_farm_wheat_field_barn_fence_food_resource_isometric_ga-0.jpg"],
-    mine: ["/images/mine.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_mine_entrance_dark_cave_opening_wooden_support_beams_o-0.jpg"],
-    sawmill: ["/images/sawmill.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_sawmill_wood_planks_logs_production_building_isometric-0.jpg"],
-    blacksmith: ["/images/blacksmith.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_blacksmith_forge_standalone_building_anvil_inside_hamm-0.jpg"],
-    barracks: ["/images/barracks.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_warehouse_storage_wooden_building_barrels_crates_isome-0.jpg"],
-    archery: ["/images/archery.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_warehouse_storage_wooden_building_barrels_crates_isome-0.jpg"],
-    wall: ["/images/wall.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_single_wall_segment_one_stone_block_medieval_wall_piec-0.jpg"],
-    warehouse: ["/images/warehouse.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_warehouse_storage_wooden_building_barrels_crates_isome-0.jpg"],
-    wall_straight: ["/images/wall_straight.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_single_wall_segment_one_stone_block_medieval_wall_piec-0.jpg"],
-    wall_corner: ["/images/wall_corner.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_single_wall_segment_one_stone_block_medieval_wall_piec-0.jpg"]
+    town_hall_2x2: "/images/town_hall_2x2.png",
+    farm: "/images/farm.png",
+    mine: "/images/mine.png",
+    sawmill: "/images/sawmill.png",
+    blacksmith: "/images/blacksmith.png",
+    barracks: "/images/barracks.png",
+    archery: "/images/archery.png",
+    warehouse: "/images/warehouse.png",
+    wall_straight: "/images/wall_straight.png",
+    wall_corner: "/images/wall_corner.png"
   },
   resources: {
-    wood: ["/images/sawmill.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_forest_trees_wood_resource_stumps_green_isometric_game-0.jpg"],
-    stone: ["/images/mine.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_mine_entrance_dark_cave_opening_wooden_support_beams_o-0.jpg"],
-    iron: ["/images/mine.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_iron_mine_cave_entrance_ore_cart_rocks_isometric_game_-0.jpg"],
-    gold: ["/images/farm.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_wheat_field_only_golden_wheat_farm_crop_no_buildings_j-0.jpg"]
+    wood: "/images/farm.png",
+    stone: "/images/mine.png",
+    iron: "/images/mine.png",
+    gold: "/images/farm.png"
   }
 };
 
@@ -413,12 +414,14 @@ function normalizeType(raw) {
 function biomeTextureKeyFromCode(code) {
   switch (code) {
     case BIOME.OCEAN:
-    case BIOME.SHALLOW:
       return "water";
+    case BIOME.SHALLOW:
+      return "beach";
     case BIOME.DESERT:
       return "desert";
-    case BIOME.FOREST:
     case BIOME.PLAINS:
+      return "plains";
+    case BIOME.FOREST:
       return "grass";
     case BIOME.JUNGLE:
       return "swamp";
@@ -427,35 +430,31 @@ function biomeTextureKeyFromCode(code) {
     case BIOME.SNOW:
       return "hills";
     default:
-      return "grass";
+      return null;
   }
 }
 
-function loadImageWithFallback(urls) {
+function loadImageStrict(url) {
   return new Promise((resolve) => {
-    const queue = Array.isArray(urls) ? urls.slice() : [urls];
-    const tryNext = () => {
-      if (!queue.length) {
-        resolve(null);
-        return;
-      }
-      const src = queue.shift();
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => tryNext();
-      img.src = src;
-    };
-    tryNext();
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
   });
 }
 
 async function loadTextures() {
   const tasks = [];
   for (const [group, items] of Object.entries(TEXTURES)) {
-    for (const [key, candidates] of Object.entries(items)) {
+    for (const [key, src] of Object.entries(items)) {
       tasks.push(
-        loadImageWithFallback(candidates).then((img) => {
-          if (img) textureManager.images[`${group}:${key}`] = img;
+        loadImageStrict(src).then((img) => {
+          const tk = `${group}:${key}`;
+          if (img) {
+            textureManager.images[tk] = img;
+          } else {
+            textureManager.missing.add(tk);
+          }
         })
       );
     }
@@ -1294,14 +1293,12 @@ function drawMap(ctx, canvas, buildingIndex) {
 
       const biomeCode = biomeMap[idx(wx, wy)];
       const textureKey = biomeTextureKeyFromCode(biomeCode);
+      if (!textureKey) continue;
       const image = textureManager.get(`biome:${textureKey}`);
-      if (image) {
-        const w = ISO_TILE_WIDTH * scale;
-        const h = ISO_TILE_HEIGHT * scale;
-        ctx.drawImage(image, p.x - (w / 2), p.y - (h / 2), w, h);
-      } else {
-        drawIsoDiamond(ctx, p.x, p.y, COLORS[biomeCode] || "#90be6d", "rgba(0,0,0,0.3)");
-      }
+      if (!image) continue;
+      const w = ISO_TILE_WIDTH * scale;
+      const h = ISO_TILE_HEIGHT * scale;
+      ctx.drawImage(image, p.x - (w / 2), p.y - (h / 2), w, h);
     }
   }
 
@@ -1325,10 +1322,7 @@ function drawResourceMarkers(ctx, view) {
         const w = Math.max(12, ISO_TILE_WIDTH * scale * 0.8);
         const h = Math.max(12, ISO_TILE_HEIGHT * scale * 1.6);
         ctx.drawImage(image, p.x - (w / 2), p.y - h - (2 * scale), w, h);
-        continue;
       }
-      const icon = RESOURCE_ICONS[resourceType];
-      if (icon) ctx.fillText(icon, p.x, p.y - (HALF_TILE_H * scale));
     }
   }
 }
@@ -1392,7 +1386,7 @@ function drawBuildings(ctx, view) {
 
     if (type === "wall") {
       const wallSpec = wallSpriteForCell(wallSet, bx, by);
-      const wallImage = textureManager.get(`buildings:${wallSpec.key}`) || textureManager.get("buildings:wall");
+      const wallImage = textureManager.get(`buildings:${wallSpec.key}`);
       const wallW = Math.max(12, ISO_TILE_WIDTH * scale);
       const wallH = Math.max(14, ISO_TILE_HEIGHT * scale * 1.8);
       if (wallImage) {
@@ -1408,12 +1402,6 @@ function drawBuildings(ctx, view) {
       drawIsoSprite(ctx, image, anchor.x, anchor.y + (HALF_TILE_H * scale * 0.5), spriteW, spriteH, 0);
       continue;
     }
-
-    const emoji = buildingEmojiMap[type] || "🏠";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = `${Math.max(16, 18 * scale)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-    ctx.fillText(emoji, pos.x, pos.y - (HALF_TILE_H * scale * 0.1));
   }
 }
 
