@@ -46,7 +46,10 @@
 })();
 
 // Rich tactical map UI for Telegram WebApp.
-const TILE_SIZE = 32;
+const ISO_TILE_WIDTH = 32;
+const ISO_TILE_HEIGHT = 16;
+const HALF_TILE_W = ISO_TILE_WIDTH / 2;
+const HALF_TILE_H = ISO_TILE_HEIGHT / 2;
 const MAP_WIDTH = 2000;
 const MAP_HEIGHT = 2000;
 const CENTER_X = Math.floor(MAP_WIDTH / 2);
@@ -60,8 +63,8 @@ const URL_PLAYER_ID = Number(new URLSearchParams(window.location.search).get("pl
 const ACTIVE_PLAYER_ID = URL_PLAYER_ID || TELEGRAM_USER_ID;
 const USER_KEY = TELEGRAM_USER_ID > 0 ? String(TELEGRAM_USER_ID) : "guest";
 
-let cameraX = CENTER_X * TILE_SIZE - window.innerWidth / 2;
-let cameraY = CENTER_Y * TILE_SIZE - window.innerHeight / 2;
+let cameraX = 0;
+let cameraY = 0;
 let scale = 0.75;
 
 let mapCanvas = null;
@@ -90,6 +93,45 @@ let lastScale = scale;
 let needsRedraw = true;
 let hoverX = null;
 let hoverY = null;
+
+const textureManager = {
+  loaded: false,
+  images: {},
+  loaders: [],
+  get(key) {
+    return this.images[key] || null;
+  }
+};
+
+const TEXTURES = {
+  biome: {
+    grass: ["/images/grass.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_grass_plain_green_flat_no_flowers_no_trees_just_grass_-0.jpg"],
+    water: ["/images/water.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_water_terrain_blue_waves_ocean_sea_no_land_isometric_g-0.jpg"],
+    mountain: ["/images/mountain.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_mountain_terrain_rocky_peaks_grey_stone_snow_caps_no_b-0.jpg"],
+    desert: ["/images/desert.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_plains_terrain_green_grass_open_field_no_trees_isometr-0.jpg"],
+    swamp: ["/images/swamp.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_forest_terrain_dense_trees_green_canopy_no_buildings_i-0.jpg"],
+    hills: ["/images/hills.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_rocky_ground_grey_stones_scattered_no_grass_just_rocks-0.jpg"]
+  },
+  buildings: {
+    town_hall_2x2: ["/images/town_hall_2x2.png", "/images/lucid-origin_tiny_pixel_art_icon_32x32_town_hall_medieval_stone_building_red_roof_flag_isomet-0.jpg"],
+    farm: ["/images/farm.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_farm_wheat_field_barn_fence_food_resource_isometric_ga-0.jpg"],
+    mine: ["/images/mine.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_mine_entrance_dark_cave_opening_wooden_support_beams_o-0.jpg"],
+    sawmill: ["/images/sawmill.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_sawmill_wood_planks_logs_production_building_isometric-0.jpg"],
+    blacksmith: ["/images/blacksmith.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_blacksmith_forge_standalone_building_anvil_inside_hamm-0.jpg"],
+    barracks: ["/images/barracks.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_warehouse_storage_wooden_building_barrels_crates_isome-0.jpg"],
+    archery: ["/images/archery.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_warehouse_storage_wooden_building_barrels_crates_isome-0.jpg"],
+    wall: ["/images/wall.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_single_wall_segment_one_stone_block_medieval_wall_piec-0.jpg"],
+    warehouse: ["/images/warehouse.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_warehouse_storage_wooden_building_barrels_crates_isome-0.jpg"],
+    wall_straight: ["/images/wall_straight.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_single_wall_segment_one_stone_block_medieval_wall_piec-0.jpg"],
+    wall_corner: ["/images/wall_corner.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_single_wall_segment_one_stone_block_medieval_wall_piec-0.jpg"]
+  },
+  resources: {
+    wood: ["/images/sawmill.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_forest_trees_wood_resource_stumps_green_isometric_game-0.jpg"],
+    stone: ["/images/mine.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_mine_entrance_dark_cave_opening_wooden_support_beams_o-0.jpg"],
+    iron: ["/images/mine.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_iron_mine_cave_entrance_ore_cart_rocks_isometric_game_-0.jpg"],
+    gold: ["/images/farm.png", "/images/lucid-origin_tiny_pixel_art_icon_16x16_wheat_field_only_golden_wheat_farm_crop_no_buildings_j-0.jpg"]
+  }
+};
 
 const VIEW_RADIUS = 15;
 const TOWER_VIEW_RADIUS = 10;
@@ -363,7 +405,63 @@ function biomeName(code) {
 function normalizeType(raw) {
   const t = (raw || "").toLowerCase().trim();
   if (t === "gold_mine") return "gold";
+  if (t === "capitol") return "town_hall_2x2";
+  if (t === "lumber") return "sawmill";
   return t;
+}
+
+function biomeTextureKeyFromCode(code) {
+  switch (code) {
+    case BIOME.OCEAN:
+    case BIOME.SHALLOW:
+      return "water";
+    case BIOME.DESERT:
+      return "desert";
+    case BIOME.FOREST:
+    case BIOME.PLAINS:
+      return "grass";
+    case BIOME.JUNGLE:
+      return "swamp";
+    case BIOME.MOUNTAIN:
+      return "mountain";
+    case BIOME.SNOW:
+      return "hills";
+    default:
+      return "grass";
+  }
+}
+
+function loadImageWithFallback(urls) {
+  return new Promise((resolve) => {
+    const queue = Array.isArray(urls) ? urls.slice() : [urls];
+    const tryNext = () => {
+      if (!queue.length) {
+        resolve(null);
+        return;
+      }
+      const src = queue.shift();
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => tryNext();
+      img.src = src;
+    };
+    tryNext();
+  });
+}
+
+async function loadTextures() {
+  const tasks = [];
+  for (const [group, items] of Object.entries(TEXTURES)) {
+    for (const [key, candidates] of Object.entries(items)) {
+      tasks.push(
+        loadImageWithFallback(candidates).then((img) => {
+          if (img) textureManager.images[`${group}:${key}`] = img;
+        })
+      );
+    }
+  }
+  await Promise.all(tasks);
+  textureManager.loaded = true;
 }
 
 function getBiome(relX, relY) {
@@ -456,17 +554,34 @@ function generateEnemyMarkers() {
   return markers;
 }
 
-function worldToScreen(relX, relY) {
+function isoProject(relX, relY) {
   return {
-    x: ((relX + CENTER_X) * TILE_SIZE * scale) - cameraX,
-    y: ((relY + CENTER_Y) * TILE_SIZE * scale) - cameraY
+    x: (relX - relY) * HALF_TILE_W,
+    y: (relX + relY) * HALF_TILE_H
+  };
+}
+
+function isoUnproject(isoX, isoY) {
+  const gx = isoX / HALF_TILE_W;
+  const gy = isoY / HALF_TILE_H;
+  return {
+    x: Math.floor((gy + gx) / 2),
+    y: Math.floor((gy - gx) / 2)
+  };
+}
+
+function worldToScreen(relX, relY) {
+  const iso = isoProject(relX, relY);
+  return {
+    x: ((iso.x - cameraX) * scale) + (mapCanvas.width / 2),
+    y: ((iso.y - cameraY) * scale) + (mapCanvas.height / 2)
   };
 }
 
 function centerOnRelative(relX, relY) {
-  const tile = TILE_SIZE * scale;
-  cameraX = (relX + CENTER_X + 0.5) * tile - mapCanvas.width / 2;
-  cameraY = (relY + CENTER_Y + 0.5) * tile - mapCanvas.height / 2;
+  const iso = isoProject(relX + 0.5, relY + 0.5);
+  cameraX = iso.x;
+  cameraY = iso.y;
 }
 
 function findCapitol() {
@@ -804,12 +919,9 @@ function bindUi() {
 }
 
 function getRelativeTileFromScreen(screenX, screenY) {
-  const worldX = (screenX + cameraX) / (TILE_SIZE * scale);
-  const worldY = (screenY + cameraY) / (TILE_SIZE * scale);
-  return {
-    x: Math.floor(worldX) - CENTER_X,
-    y: Math.floor(worldY) - CENTER_Y
-  };
+  const isoX = ((screenX - (mapCanvas.width / 2)) / scale) + cameraX;
+  const isoY = ((screenY - (mapCanvas.height / 2)) / scale) + cameraY;
+  return isoUnproject(isoX, isoY);
 }
 
 function distanceSq(a, b) {
@@ -861,12 +973,31 @@ function getPrice(type) {
 }
 
 function checkCanPlace(relX, relY, type) {
-  if (!isVisible(relX, relY)) return false;
-  const occupied = (window.buildings || loadedBuildings || []).some((b) => Number(b.x) === relX && Number(b.y) === relY);
-  if (occupied) return false;
+  const footprint = buildingFootprint(type);
+  const occupiedCells = new Set();
+  for (const b of (window.buildings || loadedBuildings || [])) {
+    const bx = Number(b.x || 0);
+    const by = Number(b.y || 0);
+    const fp = buildingFootprint(b.type);
+    for (let dx = 0; dx < fp.w; dx++) {
+      for (let dy = 0; dy < fp.h; dy++) {
+        occupiedCells.add(`${bx + dx}:${by + dy}`);
+      }
+    }
+  }
+  for (let dx = 0; dx < footprint.w; dx++) {
+    for (let dy = 0; dy < footprint.h; dy++) {
+      const x = relX + dx;
+      const y = relY + dy;
+      if (!isVisible(x, y)) return false;
+      if (occupiedCells.has(`${x}:${y}`)) return false;
+      const wx = x + CENTER_X;
+      const wy = y + CENTER_Y;
+      if (wx < 0 || wy < 0 || wx >= MAP_WIDTH || wy >= MAP_HEIGHT) return false;
+    }
+  }
   const wx = relX + CENTER_X;
   const wy = relY + CENTER_Y;
-  if (wx < 0 || wy < 0 || wx >= MAP_WIDTH || wy >= MAP_HEIGHT) return false;
   const biome = biomeMap[idx(wx, wy)];
   if (biome === BIOME.OCEAN || biome === BIOME.SHALLOW) return false;
   if (!type) return false;
@@ -875,17 +1006,23 @@ function checkCanPlace(relX, relY, type) {
 
 function drawHover(ctx) {
   if (!selectedBuilding || hoverX === null || hoverY === null) return;
-  const x = ((hoverX + CENTER_X) * TILE_SIZE * scale) - cameraX;
-  const y = ((hoverY + CENTER_Y) * TILE_SIZE * scale) - cameraY;
-  const tile = TILE_SIZE * scale;
+  const p = worldToScreen(hoverX, hoverY);
+  const halfW = HALF_TILE_W * scale;
+  const halfH = HALF_TILE_H * scale;
   const canPlace = checkCanPlace(hoverX, hoverY, selectedBuilding);
   ctx.strokeStyle = canPlace ? "#00ff00" : "#ff0000";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(x, y, tile, tile);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y - halfH);
+  ctx.lineTo(p.x + halfW, p.y);
+  ctx.lineTo(p.x, p.y + halfH);
+  ctx.lineTo(p.x - halfW, p.y);
+  ctx.closePath();
+  ctx.stroke();
   if (canPlace) {
     ctx.fillStyle = "#ffffff";
     ctx.font = '12px Arial';
-    ctx.fillText(getPrice(selectedBuilding), x + 5, y - 5);
+    ctx.fillText(getPrice(selectedBuilding), p.x, p.y - halfH - 6);
   }
 }
 
@@ -989,8 +1126,8 @@ function handleMouseMove(e) {
   if (!isDragging) return;
   const dx = e.clientX - lastPointerX;
   const dy = e.clientY - lastPointerY;
-  cameraX -= dx;
-  cameraY -= dy;
+  cameraX -= dx / scale;
+  cameraY -= dy / scale;
   lastPointerX = e.clientX;
   lastPointerY = e.clientY;
   requestRender();
@@ -1002,13 +1139,13 @@ function handleWheel(e) {
   const mouseX = e.clientX - rect.left;
   const mouseY = e.clientY - rect.top;
 
-  const worldX = (mouseX + cameraX) / (TILE_SIZE * scale);
-  const worldY = (mouseY + cameraY) / (TILE_SIZE * scale);
+  const worldX = ((mouseX - (mapCanvas.width / 2)) / scale) + cameraX;
+  const worldY = ((mouseY - (mapCanvas.height / 2)) / scale) + cameraY;
 
   scale = e.deltaY < 0 ? Math.min(3.0, scale * 1.1) : Math.max(0.25, scale / 1.1);
 
-  cameraX = (worldX * TILE_SIZE * scale) - mouseX;
-  cameraY = (worldY * TILE_SIZE * scale) - mouseY;
+  cameraX = worldX - ((mouseX - (mapCanvas.width / 2)) / scale);
+  cameraY = worldY - ((mouseY - (mapCanvas.height / 2)) / scale);
   requestRender();
 }
 
@@ -1038,8 +1175,8 @@ function handleTouchMove(e) {
     const cy = e.touches[0].clientY;
     const dx = cx - lastPointerX;
     const dy = cy - lastPointerY;
-    cameraX -= dx;
-    cameraY -= dy;
+    cameraX -= dx / scale;
+    cameraY -= dy / scale;
     lastPointerX = cx;
     lastPointerY = cy;
     requestRender();
@@ -1059,62 +1196,160 @@ function handleTouchEnd(e) {
   }
 }
 
-function drawMap(ctx, canvas) {
-  const tile = TILE_SIZE * scale;
-  if (tile <= 0.01) return null;
+function drawIsoDiamond(ctx, cx, cy, fill, stroke) {
+  const halfW = HALF_TILE_W * scale;
+  const halfH = HALF_TILE_H * scale;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - halfH);
+  ctx.lineTo(cx + halfW, cy);
+  ctx.lineTo(cx, cy + halfH);
+  ctx.lineTo(cx - halfW, cy);
+  ctx.closePath();
+  if (fill) {
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.stroke();
+  }
+}
 
-  let startCol = Math.floor(cameraX / tile);
-  let startRow = Math.floor(cameraY / tile);
-  let endCol = startCol + Math.ceil(canvas.width / tile) + 2;
-  let endRow = startRow + Math.ceil(canvas.height / tile) + 2;
+function drawIsoSprite(ctx, image, screenX, screenY, width, height, rotationRad = 0) {
+  if (!image) return;
+  ctx.save();
+  ctx.translate(screenX, screenY);
+  if (rotationRad) ctx.rotate(rotationRad);
+  ctx.drawImage(image, -width / 2, -height, width, height);
+  ctx.restore();
+}
 
-  startCol = Math.max(0, startCol);
-  startRow = Math.max(0, startRow);
-  endCol = Math.min(MAP_WIDTH, endCol);
-  endRow = Math.min(MAP_HEIGHT, endRow);
+function getVisibleTileBounds(canvas) {
+  const picks = [
+    getRelativeTileFromScreen(0, 0),
+    getRelativeTileFromScreen(canvas.width, 0),
+    getRelativeTileFromScreen(0, canvas.height),
+    getRelativeTileFromScreen(canvas.width, canvas.height),
+    getRelativeTileFromScreen(canvas.width / 2, canvas.height / 2)
+  ];
+  const xs = picks.map((p) => p.x);
+  const ys = picks.map((p) => p.y);
+  const margin = 4;
+  return {
+    minX: Math.max(-CENTER_X, Math.min(...xs) - margin),
+    maxX: Math.min(MAP_WIDTH - CENTER_X - 1, Math.max(...xs) + margin),
+    minY: Math.max(-CENTER_Y, Math.min(...ys) - margin),
+    maxY: Math.min(MAP_HEIGHT - CENTER_Y - 1, Math.max(...ys) + margin)
+  };
+}
 
+function buildingFootprint(type) {
+  if (normalizeType(type) === "town_hall_2x2") return { w: 2, h: 2 };
+  return { w: 1, h: 1 };
+}
+
+function makeBuildingIndex(buildings) {
+  const byCell = new Map();
+  const occupiedByMulti = new Set();
+  for (const b of buildings) {
+    const x = Number(b.x || 0);
+    const y = Number(b.y || 0);
+    const fp = buildingFootprint(b.type);
+    byCell.set(`${x}:${y}`, b);
+    if (fp.w > 1 || fp.h > 1) {
+      for (let dx = 0; dx < fp.w; dx++) {
+        for (let dy = 0; dy < fp.h; dy++) {
+          occupiedByMulti.add(`${x + dx}:${y + dy}`);
+        }
+      }
+    }
+  }
+  return { byCell, occupiedByMulti };
+}
+
+function drawMap(ctx, canvas, buildingIndex) {
+  const bounds = getVisibleTileBounds(canvas);
   ctx.imageSmoothingEnabled = false;
 
-  for (let row = startRow; row < endRow; row++) {
-    const y = (row * tile) - cameraY;
-    for (let col = startCol; col < endCol; col++) {
-      const x = (col * tile) - cameraX;
-      const relX = col - CENTER_X;
-      const relY = row - CENTER_Y;
-      if (!isVisible(relX, relY)) {
-        ctx.fillStyle = FOG_COLOR;
-        ctx.fillRect(x, y, tile + 1, tile + 1);
+  const minSum = bounds.minX + bounds.minY;
+  const maxSum = bounds.maxX + bounds.maxY;
+
+  for (let sum = minSum; sum <= maxSum; sum++) {
+    for (let x = bounds.minX; x <= bounds.maxX; x++) {
+      const y = sum - x;
+      if (y < bounds.minY || y > bounds.maxY) continue;
+      const wx = x + CENTER_X;
+      const wy = y + CENTER_Y;
+      if (wx < 0 || wy < 0 || wx >= MAP_WIDTH || wy >= MAP_HEIGHT) continue;
+
+      const p = worldToScreen(x, y);
+      if (!isVisible(x, y)) {
+        drawIsoDiamond(ctx, p.x, p.y, FOG_COLOR, "rgba(0,0,0,0.35)");
         continue;
       }
-      const b = biomeMap[idx(col, row)];
-      ctx.fillStyle = COLORS[b] || "#90be6d";
-      ctx.fillRect(x, y, tile + 1, tile + 1);
+
+      if (buildingIndex.occupiedByMulti.has(`${x}:${y}`)) {
+        continue;
+      }
+
+      const biomeCode = biomeMap[idx(wx, wy)];
+      const textureKey = biomeTextureKeyFromCode(biomeCode);
+      const image = textureManager.get(`biome:${textureKey}`);
+      if (image) {
+        const w = ISO_TILE_WIDTH * scale;
+        const h = ISO_TILE_HEIGHT * scale;
+        ctx.drawImage(image, p.x - (w / 2), p.y - (h / 2), w, h);
+      } else {
+        drawIsoDiamond(ctx, p.x, p.y, COLORS[biomeCode] || "#90be6d", "rgba(0,0,0,0.3)");
+      }
     }
   }
 
-  return { startCol, startRow, endCol, endRow, tile };
+  return { bounds };
 }
 
 function drawResourceMarkers(ctx, view) {
-  const { tile, startCol, startRow, endCol, endRow } = view;
+  const { bounds } = view;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `${Math.max(11, tile * 0.45)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+  ctx.font = `${Math.max(11, 14 * scale)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
 
-  for (let row = startRow; row < endRow; row++) {
-    for (let col = startCol; col < endCol; col++) {
-      const relX = col - CENTER_X;
-      const relY = row - CENTER_Y;
-      if (!isVisible(relX, relY)) continue;
-      const resourceType = getResourceTypeAt(relX, relY);
+  for (let y = bounds.minY; y <= bounds.maxY; y++) {
+    for (let x = bounds.minX; x <= bounds.maxX; x++) {
+      if (!isVisible(x, y)) continue;
+      const resourceType = getResourceTypeAt(x, y);
       if (!resourceType) continue;
+      const p = worldToScreen(x, y);
+      const image = textureManager.get(`resources:${resourceType}`);
+      if (image) {
+        const w = Math.max(12, ISO_TILE_WIDTH * scale * 0.8);
+        const h = Math.max(12, ISO_TILE_HEIGHT * scale * 1.6);
+        ctx.drawImage(image, p.x - (w / 2), p.y - h - (2 * scale), w, h);
+        continue;
+      }
       const icon = RESOURCE_ICONS[resourceType];
-      if (!icon) continue;
-      const x = (col * tile) - cameraX;
-      const y = (row * tile) - cameraY;
-      ctx.fillText(icon, x + tile / 2, y + tile / 2);
+      if (icon) ctx.fillText(icon, p.x, p.y - (HALF_TILE_H * scale));
     }
   }
+}
+
+function getWallDirections(wallSet, x, y) {
+  return {
+    n: wallSet.has(`${x}:${y - 1}`),
+    e: wallSet.has(`${x + 1}:${y}`),
+    s: wallSet.has(`${x}:${y + 1}`),
+    w: wallSet.has(`${x - 1}:${y}`)
+  };
+}
+
+function wallSpriteForCell(wallSet, x, y) {
+  const d = getWallDirections(wallSet, x, y);
+  if (d.n && d.e) return { key: "wall_corner", angle: 0 };
+  if (d.e && d.s) return { key: "wall_corner", angle: Math.PI / 2 };
+  if (d.s && d.w) return { key: "wall_corner", angle: Math.PI };
+  if (d.w && d.n) return { key: "wall_corner", angle: (Math.PI * 3) / 2 };
+  if (d.e || d.w) return { key: "wall_straight", angle: Math.PI / 2 };
+  return { key: "wall_straight", angle: 0 };
 }
 
 function drawBuildings(ctx, view) {
@@ -1126,32 +1361,64 @@ function drawBuildings(ctx, view) {
     requestRender();
     return;
   }
-  const { tile } = view;
+  const { bounds } = view;
   const buildings = window.buildings || loadedBuildings || [];
   if (!buildings.length) return;
+  const wallSet = new Set(
+    buildings
+      .filter((b) => normalizeType(b.type) === "wall")
+      .map((b) => `${Number(b.x || 0)}:${Number(b.y || 0)}`)
+  );
 
-  for (const b of buildings) {
+  const sorted = buildings
+    .slice()
+    .sort((a, b) => (Number(a.x || 0) + Number(a.y || 0)) - (Number(b.x || 0) + Number(b.y || 0)));
+
+  for (const b of sorted) {
+    const bx = Number(b.x || 0);
+    const by = Number(b.y || 0);
+    if (bx < bounds.minX - 2 || bx > bounds.maxX + 2 || by < bounds.minY - 2 || by > bounds.maxY + 2) continue;
+
     const pos = worldToScreen(b.x, b.y);
-    if (pos.x + tile < -60 || pos.y + tile < -60 || pos.x > mapCanvas.width + 60 || pos.y > mapCanvas.height + 60) continue;
+    if (pos.x < -200 || pos.y < -200 || pos.x > mapCanvas.width + 200 || pos.y > mapCanvas.height + 200) continue;
 
-    const emoji = buildingEmojiMap[normalizeType(b.type)] || "🏠";
-    const stickerX = pos.x + tile / 2;
-    const stickerY = pos.y + tile / 2;
+    const type = normalizeType(b.type);
+    const footprint = buildingFootprint(type);
+    let anchor = worldToScreen(bx + (footprint.w / 2) - 0.5, by + (footprint.h / 2) - 0.5);
 
-    ctx.beginPath();
-    ctx.arc(stickerX, stickerY, Math.max(8, tile * 0.45), 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.fill();
+    if (String(b.ownerId || "") === String(ACTIVE_PLAYER_ID || "")) {
+      drawIsoDiamond(ctx, pos.x, pos.y, "rgba(80,180,255,0.14)", "rgba(130,210,255,0.42)");
+    }
 
+    if (type === "wall") {
+      const wallSpec = wallSpriteForCell(wallSet, bx, by);
+      const wallImage = textureManager.get(`buildings:${wallSpec.key}`) || textureManager.get("buildings:wall");
+      const wallW = Math.max(12, ISO_TILE_WIDTH * scale);
+      const wallH = Math.max(14, ISO_TILE_HEIGHT * scale * 1.8);
+      if (wallImage) {
+        drawIsoSprite(ctx, wallImage, pos.x, pos.y + (HALF_TILE_H * scale * 0.2), wallW, wallH, wallSpec.angle);
+      }
+      continue;
+    }
+
+    const image = textureManager.get(`buildings:${type}`);
+    if (image) {
+      const spriteW = Math.max(14, ISO_TILE_WIDTH * scale * footprint.w * 1.1);
+      const spriteH = Math.max(18, ISO_TILE_HEIGHT * scale * (2.3 + (footprint.h - 1) * 0.8));
+      drawIsoSprite(ctx, image, anchor.x, anchor.y + (HALF_TILE_H * scale * 0.5), spriteW, spriteH, 0);
+      continue;
+    }
+
+    const emoji = buildingEmojiMap[type] || "🏠";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = `${Math.max(16, tile * 0.95)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-    ctx.fillText(emoji, stickerX, stickerY);
+    ctx.font = `${Math.max(16, 18 * scale)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    ctx.fillText(emoji, pos.x, pos.y - (HALF_TILE_H * scale * 0.1));
   }
 }
 
 function drawUnits(ctx, view) {
-  const { tile } = view;
+  const tile = ISO_TILE_WIDTH * scale;
   if (!loadedUnits.length) return;
 
   for (const u of loadedUnits) {
@@ -1159,8 +1426,8 @@ function drawUnits(ctx, view) {
     if (pos.x + tile < -60 || pos.y + tile < -60 || pos.x > mapCanvas.width + 60 || pos.y > mapCanvas.height + 60) continue;
 
     const emoji = unitEmojiMap[normalizeType(u.type)] || "🛡️";
-    const x = pos.x + tile * 0.65;
-    const y = pos.y + tile * 0.25;
+    const x = pos.x;
+    const y = pos.y - (HALF_TILE_H * scale);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = `${Math.max(14, tile * 0.72)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
@@ -1169,14 +1436,14 @@ function drawUnits(ctx, view) {
 }
 
 function drawEnemies(ctx, view) {
-  const { tile } = view;
+  const tile = ISO_TILE_WIDTH * scale;
   for (const e of enemyMarkers) {
     const pos = worldToScreen(e.x, e.y);
     if (pos.x + tile < -40 || pos.y + tile < -40 || pos.x > mapCanvas.width + 40 || pos.y > mapCanvas.height + 40) continue;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = `${Math.max(13, tile * 0.65)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-    ctx.fillText("👾", pos.x + tile / 2, pos.y + tile / 2);
+    ctx.fillText("👾", pos.x, pos.y - (HALF_TILE_H * scale));
   }
 }
 
@@ -1194,7 +1461,8 @@ function render() {
     return;
   }
   mapCtx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
-  const view = drawMap(mapCtx, mapCanvas);
+  const buildingIndex = makeBuildingIndex(window.buildings || loadedBuildings || []);
+  const view = drawMap(mapCtx, mapCanvas, buildingIndex);
   if (!view) {
     requestAnimationFrame(render);
     return;
@@ -1213,6 +1481,7 @@ async function bootstrap() {
   mapCanvas = document.getElementById("gameCanvas");
   mapCtx = mapCanvas.getContext("2d");
 
+  await loadTextures();
   generateBiomeMap();
   generateResourceNodes();
 
@@ -1248,10 +1517,9 @@ async function bootstrap() {
     const rect = mapCanvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    const worldX = Math.round((mouseX + cameraX) / (TILE_SIZE * scale));
-    const worldY = Math.round((mouseY + cameraY) / (TILE_SIZE * scale));
-    const tileX = worldX - CENTER_X;
-    const tileY = worldY - CENTER_Y;
+    const pick = getRelativeTileFromScreen(mouseX, mouseY);
+    const tileX = pick.x;
+    const tileY = pick.y;
     console.log(`Клик по клетке (${tileX}, ${tileY})`);
     await onMapClick(tileX, tileY);
   });
