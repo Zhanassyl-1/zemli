@@ -105,32 +105,32 @@ const textureManager = {
 
 const TEXTURES = {
   biome: {
-    grass: "/images/grass.png",
-    water: "/images/water.png",
-    mountain: "/images/mountain.png",
+    grass: "/images/lucid-origin_tiny_pixel_art_icon_16x16_grass_plain_green_flat_no_flowers_no_trees_just_grass_-0-removebg-preview.png",
+    water: "/images/lucid-origin_tiny_pixel_art_icon_16x16_water_terrain_blue_waves_ocean_sea_no_land_isometric_g-0-removebg-preview.png",
+    mountain: "/images/lucid-origin_tiny_pixel_art_icon_16x16_mountain_terrain_rocky_peaks_grey_stone_snow_caps_no_b-0-removebg-preview.png",
     desert: "/images/desert.png",
-    swamp: "/images/swamp.png",
-    hills: "/images/hills.png",
-    plains: "/images/plains.png",
+    swamp: "/images/lucid-origin_tiny_pixel_art_icon_16x16_forest_terrain_dense_trees_green_canopy_no_buildings_i-0-removebg-preview.png",
+    hills: "/images/lucid-origin_tiny_pixel_art_icon_16x16_rocky_ground_grey_stones_scattered_no_grass_just_rocks-0-removebg-preview.png",
+    plains: "/images/lucid-origin_tiny_pixel_art_icon_16x16_plains_terrain_green_grass_open_field_no_trees_isometr-0-removebg-preview.png",
     beach: "/images/beach.png"
   },
   buildings: {
-    town_hall_2x2: "/images/town_hall_2x2.png",
-    farm: "/images/farm.png",
-    mine: "/images/mine.png",
-    sawmill: "/images/sawmill.png",
-    blacksmith: "/images/blacksmith.png",
+    town_hall_2x2: "/images/lucid-origin_tiny_pixel_art_icon_32x32_town_hall_medieval_stone_building_red_roof_flag_isomet-0-removebg-preview.png",
+    farm: "/images/lucid-origin_tiny_pixel_art_icon_16x16_wheat_field_only_golden_wheat_farm_crop_no_buildings_j-0-removebg-preview.png",
+    mine: "/images/lucid-origin_tiny_pixel_art_icon_16x16_mine_entrance_dark_cave_opening_wooden_support_beams_o-0-removebg-preview.png",
+    sawmill: "/images/lucid-origin_tiny_pixel_art_icon_16x16_sawmill_wood_planks_logs_production_building_isometric-0-removebg-preview.png",
+    blacksmith: "/images/lucid-origin_tiny_pixel_art_icon_16x16_blacksmith_forge_standalone_building_anvil_inside_hamm-0-removebg-preview.png",
     barracks: "/images/barracks.png",
     archery: "/images/archery.png",
-    warehouse: "/images/warehouse.png",
-    wall_straight: "/images/wall_straight.png",
+    warehouse: "/images/lucid-origin_tiny_pixel_art_icon_16x16_warehouse_storage_wooden_building_barrels_crates_isome-0-removebg-preview.png",
+    wall_straight: "/images/lucid-origin_tiny_pixel_art_icon_16x16_single_wall_segment_one_stone_block_medieval_wall_piec-0-removebg-preview.png",
     wall_corner: "/images/wall_corner.png"
   },
   resources: {
-    wood: "/images/farm.png",
-    stone: "/images/mine.png",
-    iron: "/images/mine.png",
-    gold: "/images/farm.png"
+    wood: "/images/lucid-origin_tiny_pixel_art_icon_16x16_forest_trees_wood_resource_stumps_green_isometric_game-0-removebg-preview.png",
+    stone: "/images/lucid-origin_tiny_pixel_art_icon_16x16_mine_entrance_dark_cave_opening_wooden_support_beams_o-0-removebg-preview.png",
+    iron: "/images/lucid-origin_tiny_pixel_art_icon_16x16_iron_mine_cave_entrance_ore_cart_rocks_isometric_game_-0-removebg-preview.png",
+    gold: "/images/lucid-origin_tiny_pixel_art_icon_16x16_wheat_field_only_golden_wheat_farm_crop_no_buildings_j-0-removebg-preview.png"
   }
 };
 
